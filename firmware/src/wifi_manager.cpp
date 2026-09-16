@@ -17,7 +17,7 @@ void WiFiManager::loop() {
             lastReconnectAttempt = now;
             Serial.println("Tentando reconexão Wi-Fi...");
             WiFi.disconnect();
-            WiFi.rebegin();
+            WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
         }
     }
 }

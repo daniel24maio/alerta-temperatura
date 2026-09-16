@@ -7,11 +7,11 @@
 #define DEVICE_ID "esp32-temp-01"
 
 // Configurações da Rede Wi-Fi
-#define WIFI_SSID "SuaRedeWiFi"
-#define WIFI_PASSWORD "SuaSenhaWiFi"
+#define WIFI_SSID "Luca"
+#define WIFI_PASSWORD "que1985@"
 
 // Configurações do Broker MQTT
-#define MQTT_BROKER_HOST "192.168.1.100" // Altere para o IP do seu servidor
+#define MQTT_BROKER_HOST "192.168.31.220" // Altere para o IP do seu servidor
 #define MQTT_BROKER_PORT 1883
 #define MQTT_USER ""
 #define MQTT_PASS ""

@@ -79,6 +79,7 @@ void loop() {
         doc["temp"] = sensorData.temperature;
         doc["humidity"] = sensorData.humidity;
         doc["noiseLevel"] = sensorData.noiseLevel;
+        doc["lux"] = sensorData.lux;
         
         JsonArray alerts = doc.createNestedArray("alerts");
         if (sensorData.alertCode != "NONE") {

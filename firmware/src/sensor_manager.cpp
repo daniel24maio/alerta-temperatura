@@ -1,11 +1,43 @@
 #include "sensor_manager.h"
 #include "config.h"
+#include <Wire.h>
+#include <BH1750.h>
 
 static DHT dht(PIN_DHT, DHT_TYPE);
+static BH1750 lightMeter;
+static bool hasLightMeter = false;
 
 void SensorManager::setup() {
     dht.begin();
     pinMode(PIN_SOUND_ADC, INPUT);
+
+    // Inicializa I2C nos pinos SDA=21 e SCL=22
+    Wire.begin(21, 22);
+    Wire.setTimeOut(50);
+    Serial.println("Escaneando I2C (SDA=21, SCL=22)...");
+    int count = 0;
+    for (byte addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        if (Wire.endTransmission() == 0) {
+            Serial.print("Dispositivo I2C encontrado no endereco 0x");
+            if (addr < 16) Serial.print("0");
+            Serial.println(addr, HEX);
+            count++;
+        }
+    }
+    if (count == 0) {
+        Serial.println("Nenhum dispositivo I2C respondeu em SDA=21, SCL=22.");
+    }
+
+    if (lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {
+        hasLightMeter = true;
+        Serial.println("Sensor BH1750 (Luminosidade) inicializado no endereco 0x23.");
+    } else if (lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE, 0x5C)) {
+        hasLightMeter = true;
+        Serial.println("Sensor BH1750 inicializado no endereco 0x5C.");
+    } else {
+        Serial.println("Aviso: BH1750 nao encontrado no barramento I2C.");
+    }
 }
 
 SensorData SensorManager::readSensors() {
@@ -21,6 +53,14 @@ SensorData SensorManager::readSensors() {
 
     data.temperature = t;
     data.humidity = h;
+
+    // Leitura de Luminosidade (Lux)
+    float lux = 0.0f;
+    if (hasLightMeter) {
+        lux = lightMeter.readLightLevel();
+        if (lux < 0) lux = 0.0f;
+    }
+    data.lux = lux;
 
     // Amostragem ADC de Som Ambiente (calculando pico a pico / nível relativo)
     long sum = 0;

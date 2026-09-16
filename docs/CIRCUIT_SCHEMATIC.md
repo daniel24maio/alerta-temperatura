@@ -99,8 +99,125 @@ A protoboard possui o canal central divisor e duas seções de 5 furos: **A-B-C-
 
 | Componente | Precisa de Resistor? | Valor Recomendado | Código de Cores (Kit) | Onde e Como Ligar |
 | :--- | :---: | :---: | :---: | :--- |
-| **LED de Alerta** | **SIM (Obrigatório)** | **220 Ω** ou **330 Ω** | **220Ω:** Vermelho - Vermelho - Marrom<br>**330Ω:** Laranja - Laranja - Marrom | Em série entre o pino **D12** e o **Ânodo (+)** do LED. |
+| **LED de Alerta** | **SIM (Obrigatório)** | **220 Ω a 470 Ω** *(460 Ω OK)* | **220Ω:** Vermelho - Vermelho - Marrom<br>**330Ω:** Laranja - Laranja - Marrom<br>**470Ω:** Amarelo - Violeta - Marrom | Em série entre o pino **D12** e o **Ânodo (+)** do LED. |
 | **Display TFT 2.25"** | **NÃO** | — | — | Conexão direta aos pinos (3.3V nativo). |
 | **Sensor BH1750** | **NÃO** | — | — | Conexão direta. A plaquinha GY-302 já possui pull-ups I2C. |
 | **Sensor Temp/Umid** *(Aguardando)* | **DEPENDE** | **4.7 kΩ** ou **10 kΩ** | **10kΩ:** Marrom - Preto - Laranja | Se vier em módulo com placa: não precisa. Se vier sensor solto de 4 pinos: 1 resistor entre 3V3 e D15. |
+
+---
+
+## 5. Diagrama Visual de Conexões Elétricas (Mermaid)
+
+```mermaid
+flowchart TD
+    subgraph ALIMENTACAO["Barramento de Alimentacao (Protoboard)"]
+        RAIL_3V3["Linha Vermelha (+ 3.3V)"]
+        RAIL_GND["Linha Azul (- GND)"]
+    end
+
+    subgraph SHIELD_ESQ["ESP32 Shield - Lado Esquerdo"]
+        D12["Pino D12"]
+        D14["Pino D14 (Atuador/Buzzer)"]
+        D32["Pino D32 (TFT Backlight)"]
+        D34["Pino D34 (ADC Som)"]
+    end
+
+    subgraph SHIELD_DIR["ESP32 Shield - Lado Direito"]
+        PIN_3V3["Pino 3V3"]
+        PIN_GND["Pino GND"]
+        D15["Pino D15 (DHT Data)"]
+        D2["Pino D2 (TFT DC)"]
+        D4["Pino D4 (TFT RES)"]
+        D5["Pino D5 (TFT CS)"]
+        D18["Pino D18 (TFT SCL)"]
+        D21["Pino D21 (I2C SDA)"]
+        D22["Pino D22 (I2C SCL)"]
+        D23["Pino D23 (TFT SDA/MOSI)"]
+    end
+
+    %% Energizacao dos Barramentos
+    PIN_3V3 ==>|Jumper Vermelho| RAIL_3V3
+    PIN_GND ==>|Jumper Azul/Preto| RAIL_GND
+
+    %% Circuito do LED de Alerta
+    subgraph CIRCUITO_LED["Circuito do LED"]
+        RES["Resistor 220R / 330R / 460R-470R"]
+        LED_POS["LED: Anodo (+) / Perna Longa"]
+        LED_NEG["LED: Catodo (-) / Perna Curta"]
+    end
+    D12 --> RES
+    RES --> LED_POS
+    LED_NEG --> RAIL_GND
+
+    %% Sensor DHT22 / Temp & Umidade
+    subgraph MOD_DHT["Sensor Temp/Umid (DHT22)"]
+        DHT_VCC["VCC (+)"]
+        DHT_DATA["DATA (Sinal)"]
+        DHT_GND["GND (-)"]
+    end
+    RAIL_3V3 --> DHT_VCC
+    RAIL_GND --> DHT_GND
+    DHT_DATA --> D15
+
+    %% Sensor de Ruido / Som (Analogico)
+    subgraph MOD_SOM["Sensor de Som (KY-038 / LM393)"]
+        SOM_VCC["VCC (+)"]
+        SOM_AO["AO (Saida Analogica)"]
+        SOM_GND["GND (-)"]
+    end
+    RAIL_3V3 --> SOM_VCC
+    RAIL_GND --> SOM_GND
+    SOM_AO --> D34
+
+    %% Display TFT ST7789
+    subgraph MOD_TFT["Display TFT ST7789 (SPI)"]
+        TFT_VCC["VCC (+)"]
+        TFT_GND["GND (-)"]
+        TFT_SCL["SCL (Clock)"]
+        TFT_SDA["SDA (MOSI)"]
+        TFT_RES["RES (Reset)"]
+        TFT_DC["DC (Data/Cmd)"]
+        TFT_CS["CS (Chip Select)"]
+        TFT_BL["BL (Luz de Fundo)"]
+    end
+    RAIL_3V3 --> TFT_VCC
+    RAIL_GND --> TFT_GND
+    D18 --> TFT_SCL
+    D23 --> TFT_SDA
+    D4 --> TFT_RES
+    D2 --> TFT_DC
+    D5 --> TFT_CS
+    D32 --> TFT_BL
+
+    %% Sensor BH1750 (Luz I2C - Opcional)
+    subgraph MOD_BH1750["Sensor de Luz (BH1750 I2C)"]
+        BH_VCC["VCC (+)"]
+        BH_GND["GND (-)"]
+        BH_SDA["SDA"]
+        BH_SCL["SCL"]
+    end
+    RAIL_3V3 -.-> BH_VCC
+    RAIL_GND -.-> BH_GND
+    D21 -.-> BH_SDA
+    D22 -.-> BH_SCL
+```
+
+---
+
+## 6. Diretivas Normativas de Saúde e Classificação de Luminosidade (Lux)
+
+Com base nas normas técnicas de ergonomia e higiene ocupacional:
+- **ABNT NBR ISO/CIE 8995-1** (Iluminação de Ambientes de Trabalho - Parte 1: Interior)
+- **NHO 11 da FUNDACENTRO** (Avaliação dos Níveis de Iluminamento em Ambientes de Trabalho)
+- **NR-17** (Ergonomia e Conforto Visual no Trabalho)
+
+O valor numérico em **Lux (lx)** lido pelo sensor BH1750 é mantido no painel e classificado dinamicamente nas seguintes faixas:
+
+| Faixa (Lux) | Classificação do Ambiente | Impacto na Saúde Visual (Ergonomia) | Indicação no Dashboard |
+| :--- | :--- | :--- | :--- |
+| **< 100 lx** | **Muito Baixo (Crítico / Penumbra)** | Risco severo de fadiga visual (*astenopia*), sonolência e dores de cabeça. Inadequado para leitura ou tela. | 🔴 Muito Baixo (<100 lx): Insuficiente / Risco de Fadiga Ocular |
+| **100 a 299 lx** | **Baixo (Áreas de Circulação)** | Aceitável para corredores, depósitos ou relaxamento, mas insuficiente para estudo contínuo. | ⚠️ Baixo (100-300 lx): Circulação / Fraco p/ Trabalho (NHO 11) |
+| **300 a 750 lx** | **Ideal (Conforto Normativo)** | **Faixa preconizada pela NBR 8995-1** para escritórios, salas de aula e uso de computadores. Máximo rendimento sem esforço. | ✅ Ideal (300-750 lx): Conforto Visual Normativo (NBR 8995-1) |
+| **751 a 1500 lx** | **Alto (Tarefas de Precisão)** | Iluminação intensa. Excelente para eletrônica fina, montagem mecânica ou desenho técnico. | 💡 Alto (750-1500 lx): Adequado p/ Tarefas de Alta Precisão |
+| **> 1500 lx** | **Excessivo (Risco de Ofuscamento)** | Acima do necessário para interiores. Pode causar ofuscamento (*glare*), reflexos incômodos e cefaleia. | ⚡ Excessivo (>1500 lx): Acima do Necessário / Ofuscamento |
 

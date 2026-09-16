@@ -4,6 +4,7 @@ export const telemetrySchema = z.object({
   temp: z.number(),
   humidity: z.number(),
   noiseLevel: z.number().default(45),
+  lux: z.number().optional(),
   alerts: z.array(z.string()).default([]),
   lcdText: z.string().optional(),
   displayType: z.string().optional(),

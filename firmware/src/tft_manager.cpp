@@ -4,10 +4,15 @@
 static TFT_eSPI tft = TFT_eSPI();
 
 void TFTManager::setup() {
+    Serial.println("Inicializando Display ST7789...");
+    pinMode(32, OUTPUT);
+    digitalWrite(32, LOW); // Lógica invertida deste display: LOW acende a luz de fundo!
+
     tft.init();
     tft.setRotation(1); // Modo Landscape (284x76)
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    Serial.println("Display ST7789 inicializado.");
 }
 
 void TFTManager::renderDashboard(const SensorData& data, bool actuatorState, bool wifiConnected, bool mqttConnected) {

@@ -9,6 +9,7 @@ struct SensorData {
     float temperature;
     float humidity;
     int noiseLevel;
+    float lux;
     String alertCode;
     String lcdMessage;
     bool requiresActuator;

@@ -45,8 +45,60 @@ apiRouter.get('/devices/:id', async (req: Request, res: Response, next: NextFunc
 apiRouter.get('/devices/:id/history', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const deviceId = req.params.id;
-    const history = await kvStore.getDeviceHistory(deviceId, 50);
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+    const history = await kvStore.getDeviceHistory(deviceId, isNaN(limit) ? 100 : limit);
     return res.json(history);
+  } catch (err) {
+    next(err);
+  }
+});
+
+apiRouter.get('/devices/:id/history/export', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const deviceId = req.params.id;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 1000;
+    const history = await kvStore.getDeviceHistory(deviceId, isNaN(limit) ? 1000 : limit);
+
+    const headers = [
+      'Timestamp (ISO)',
+      'Data/Hora Local',
+      'Temperatura (C)',
+      'Umidade (%)',
+      'Ruido (dB)',
+      'Luminosidade (lx)',
+      'Alertas',
+      'Estado Atuador',
+    ];
+
+    const rows = history.map((item) => {
+      const date = item.recordedAt ? new Date(item.recordedAt) : new Date();
+      const localDateStr = `"${date.toLocaleDateString('pt-BR')} ${date.toLocaleTimeString('pt-BR')}"`;
+      const tempStr = item.temp !== undefined ? item.temp.toFixed(1) : '';
+      const humStr = item.humidity !== undefined ? item.humidity.toFixed(1) : '';
+      const noiseStr = item.noiseLevel !== undefined ? item.noiseLevel : '';
+      const luxStr = item.lux !== undefined ? item.lux.toFixed(1) : '';
+      const alertsStr = `"${(item.alerts || []).join(';')}"`;
+      const actuatorStr = item.actuatorState ? 'LIGADO' : 'DESLIGADO';
+
+      return [
+        item.recordedAt || date.toISOString(),
+        localDateStr,
+        tempStr,
+        humStr,
+        noiseStr,
+        luxStr,
+        alertsStr,
+        actuatorStr,
+      ].join(',');
+    });
+
+    // Adiciona BOM UTF-8 (\uFEFF) para garantir acentuação correta no Excel brasileiro
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const filename = `telemetria-${deviceId}-${new Date().toISOString().slice(0, 10)}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(csvContent);
   } catch (err) {
     next(err);
   }

@@ -68,7 +68,8 @@ class GatewayMQTTService {
       if (subtopic === 'telemetry') {
         const parsed = telemetrySchema.parse(rawJson);
         await kvStore.saveTelemetry(deviceId, parsed);
-        console.log(`[MQTT Telemetria] [${deviceId}] Temp: ${parsed.temp}°C | Umid: ${parsed.humidity}% | Ruído: ${parsed.noiseLevel}dB`);
+        const luxStr = parsed.lux !== undefined ? ` | Lux: ${parsed.lux} lx` : '';
+        console.log(`[MQTT Telemetria] [${deviceId}] Temp: ${parsed.temp}°C | Umid: ${parsed.humidity}% | Ruído: ${parsed.noiseLevel}dB${luxStr}`);
       } else if (subtopic === 'status') {
         const parsed = statusSchema.parse(rawJson);
         await kvStore.updateDeviceStatus(deviceId, parsed);

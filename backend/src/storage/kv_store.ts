@@ -64,7 +64,7 @@ class KeyValueStore {
     if (this.isUsingRedis && this.redis) {
       try {
         await this.redis.lpush(key, value);
-        await this.redis.ltrim(key, 0, 99);
+        await this.redis.ltrim(key, 0, 999);
         return;
       } catch {
         this.isUsingRedis = false;
@@ -74,7 +74,7 @@ class KeyValueStore {
     const currentListStr = this.memoryStore.get(key);
     let list: string[] = currentListStr ? JSON.parse(currentListStr) : [];
     list.unshift(value);
-    if (list.length > 100) list = list.slice(0, 100);
+    if (list.length > 1000) list = list.slice(0, 1000);
     this.memoryStore.set(key, JSON.stringify(list));
   }
 
@@ -194,8 +194,9 @@ class KeyValueStore {
     return records;
   }
 
-  async getDeviceHistory(deviceId: string, limit = 50): Promise<any[]> {
-    const rawList = await this.lrange(`device:${deviceId}:history`, 0, limit - 1);
+  async getDeviceHistory(deviceId: string, limit = 100): Promise<any[]> {
+    const clampedLimit = Math.max(1, Math.min(limit, 1000));
+    const rawList = await this.lrange(`device:${deviceId}:history`, 0, clampedLimit - 1);
     return rawList.map((item) => JSON.parse(item));
   }
 }
