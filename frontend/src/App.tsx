@@ -6,7 +6,11 @@ import { ActuatorControl } from './components/ActuatorControl';
 import { HistoryTable, HistoryItem } from './components/HistoryTable';
 import { HistoryChart } from './components/HistoryChart';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost'
+    ? `http://${window.location.hostname}:5001/api`
+    : 'http://localhost:5001/api');
 const AUTH_HEADER = 'Basic ' + btoa('admin:admin123');
 
 interface DeviceRecord {

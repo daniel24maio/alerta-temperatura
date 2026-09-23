@@ -32,7 +32,7 @@ Solução IoT completa desenvolvida para atendimento integral dos requisitos das
    ```
 2. **Acesse a Aplicação React**:
    - Frontend React: `http://localhost:3000`
-   - Backend API REST: `http://localhost:5000/api`
+   - Backend API REST: `http://localhost:5001/api`
 3. **Executar Simulador ESP32**:
    ```bash
    cd backend

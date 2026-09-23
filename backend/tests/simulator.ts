@@ -31,7 +31,7 @@ client.on('connect', () => {
 
   const onlinePayload = JSON.stringify({
     status: 'online',
-    ip: '192.168.1.105',
+    ip: process.env.DEVICE_IP || '10.11.30.190',
     firmwareVersion: '1.0.0-sim',
     uptime: 120,
     timestamp: Math.floor(Date.now() / 1000),

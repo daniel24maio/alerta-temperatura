@@ -4,7 +4,7 @@ import { z } from 'zod';
 dotenv.config();
 
 const envSchema = z.object({
-  PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
+  PORT: z.string().default('5001').transform((val) => parseInt(val, 10)),
   MQTT_BROKER_URL: z.string().default('mqtt://localhost:1883'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   API_USER: z.string().default('admin'),
