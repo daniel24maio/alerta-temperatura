@@ -25,6 +25,9 @@ frontend/.vite/
 .env.test
 backend/.env
 frontend/.env
+secrets.h
+firmware/include/secrets.h
+
 
 # PlatformIO / Firmware C++ & ESP32 Builds
 .pio/
