@@ -31,6 +31,9 @@ class GatewayMQTTService {
         'v1/devices/+/telemetry',
         'v1/devices/+/status',
         'v1/devices/+/commands/ack',
+        'ifmg/iot3/+/+/+/telemetry',
+        'ifmg/iot3/+/+/+/availability',
+        'ifmg/iot3/+/+/+/state',
       ];
 
       this.client?.subscribe(topics, { qos: 1 }, (err) => {
@@ -58,25 +61,50 @@ class GatewayMQTTService {
 
   private async handleIncomingMessage(topic: string, messageStr: string): Promise<void> {
     try {
-      const parts = topic.split('/');
-      if (parts.length < 4 || parts[0] !== 'v1' || parts[1] !== 'devices') return;
+      let deviceId = '';
+      let subtopic = '';
 
-      const deviceId = parts[2];
-      const subtopic = parts.slice(3).join('/');
-      const rawJson = JSON.parse(messageStr);
+      if (topic.startsWith('ifmg/iot3/')) {
+        const parts = topic.split('/');
+        if (parts.length >= 6) {
+          // ifmg/iot3/<turma>/<aluno>/<dispositivo>/<subtopic>
+          deviceId = parts[4];
+          subtopic = parts[5];
+        }
+      } else if (topic.startsWith('v1/devices/')) {
+        const parts = topic.split('/');
+        if (parts.length >= 4) {
+          deviceId = parts[2];
+          subtopic = parts.slice(3).join('/');
+        }
+      }
+
+      if (!deviceId || !subtopic) return;
 
       if (subtopic === 'telemetry') {
+        const rawJson = JSON.parse(messageStr);
         const parsed = telemetrySchema.parse(rawJson);
         await kvStore.saveTelemetry(deviceId, parsed);
         const luxStr = parsed.lux !== undefined ? ` | Lux: ${parsed.lux} lx` : '';
-        console.log(`[MQTT Telemetria] [${deviceId}] Temp: ${parsed.temp}°C | Umid: ${parsed.humidity}% | Ruído: ${parsed.noiseLevel}dB${luxStr}`);
-      } else if (subtopic === 'status') {
-        const parsed = statusSchema.parse(rawJson);
-        await kvStore.updateDeviceStatus(deviceId, parsed);
-        console.log(`[MQTT Status/LWT] [${deviceId}] Status: ${parsed.status.toUpperCase()}`);
-      } else if (subtopic === 'commands/ack') {
+        const seqStr = parsed.sequence !== undefined ? ` | Seq: #${parsed.sequence}` : '';
+        console.log(`[MQTT Telemetria] [${deviceId}] Temp: ${parsed.temp}°C | Umid: ${parsed.humidity}% | Ruído: ${parsed.noiseLevel}dB${luxStr}${seqStr}`);
+      } else if (subtopic === 'status' || subtopic === 'availability') {
+        let statusVal: 'online' | 'offline' = 'online';
+        const trimmed = messageStr.trim();
+        if (trimmed === 'online' || trimmed === 'offline') {
+          statusVal = trimmed;
+          await kvStore.updateDeviceStatus(deviceId, { status: statusVal, timestamp: Date.now() / 1000 });
+        } else {
+          const rawJson = JSON.parse(messageStr);
+          const parsed = statusSchema.parse(rawJson);
+          await kvStore.updateDeviceStatus(deviceId, parsed);
+          statusVal = parsed.status;
+        }
+        console.log(`[MQTT Presença/LWT] [${deviceId}] Status: ${statusVal.toUpperCase()}`);
+      } else if (subtopic === 'commands/ack' || subtopic === 'state') {
+        const rawJson = JSON.parse(messageStr);
         const parsed = ackSchema.parse(rawJson);
-        console.log(`[MQTT ACK] [${deviceId}] Comando: ${parsed.commandId} | Sucesso: ${parsed.success}`);
+        console.log(`[MQTT Confirmação/State] [${deviceId}] Req: ${parsed.commandId} | Estado: ${parsed.state}`);
 
         const pending = this.pendingCommands.get(parsed.commandId);
         if (pending) {
@@ -96,8 +124,17 @@ class GatewayMQTTService {
     }
 
     const commandId = `cmd_${Math.random().toString(36).substring(2, 9)}`;
-    const topic = `v1/devices/${deviceId}/commands`;
-    const payload = JSON.stringify({ commandId, action, state });
+    const topicIfmg = `ifmg/iot3/turmaA/daniel/${deviceId}/command`;
+    const topicV1 = `v1/devices/${deviceId}/commands`;
+    const payload = JSON.stringify({
+      action: 'set',
+      target: 'led',
+      value: state,
+      requestId: commandId,
+      // compatibilidade legada:
+      commandId,
+      state,
+    });
 
     return new Promise((resolve, reject) => {
       const timeoutTimer = setTimeout(() => {
@@ -107,13 +144,15 @@ class GatewayMQTTService {
 
       this.pendingCommands.set(commandId, { resolve, reject, timeoutTimer });
 
-      this.client?.publish(topic, payload, { qos: 1 }, (err) => {
+      // Publica em ambos para máxima compatibilidade
+      this.client?.publish(topicIfmg, payload, { qos: 1 });
+      this.client?.publish(topicV1, payload, { qos: 1 }, (err) => {
         if (err) {
           clearTimeout(timeoutTimer);
           this.pendingCommands.delete(commandId);
           reject(err);
         } else {
-          console.log(`[MQTT Envio] Comando enviado para [${deviceId}] ID: ${commandId}`);
+          console.log(`[MQTT Gateway] Comando enviado para [${deviceId}] ID: ${commandId}`);
         }
       });
     });
@@ -121,3 +160,4 @@ class GatewayMQTTService {
 }
 
 export const gatewayMQTT = new GatewayMQTTService();
+

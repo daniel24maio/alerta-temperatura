@@ -11,6 +11,7 @@ public:
     static bool isConnected();
     static bool publishTelemetry(const char* jsonPayload);
     static bool publishStatusOnline();
+    static bool publishState(const char* actuator, bool state, const char* requestId = "");
     static bool publishACK(const char* commandId, bool success, bool state);
 private:
     static void reconnect();

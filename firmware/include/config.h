@@ -3,82 +3,75 @@
 
 #include <Arduino.h>
 
-// ID Único do Dispositivo ESP32
-#define DEVICE_ID "esp32-temp-01"
-
 // ==============================================================================
-// SELEÇÃO DO PERFIL DE REDE ATIVA
-// Alterne entre os perfis descomentando APENAS UMA das opções abaixo:
+// 1. CREDENCIAIS SEGURAS (SECRETS)
+// Isoladas em secrets.h conforme Seções 4.4 e 15 da Apostila do IFMG
 // ==============================================================================
-#define USAR_REDE_MACBOOK // Rede atual fora de casa (Broker no
-                          // MacBook: 10.11.30.190)
-// #define USAR_REDE_CASA    // Rede residencial (Wi-Fi "Luca" / Broker:
-// 192.168.31.220)
-
-#if defined(USAR_REDE_MACBOOK)
-// --------------------------------------------------------------------------
-// PERFIL: FORA DE CASA / REDE DO MACBOOK (ATIVO)
-// --------------------------------------------------------------------------
-// >>> DIGITE AQUI AS CREDENCIAIS DA REDE WI-FI ATUAL (FORA DE CASA) <<<
-#define WIFI_SSID "daniel"
-#define WIFI_PASSWORD "dan1985@"
-
-// Endereço do Broker MQTT (IP do MacBook na rede externa atual)
-#define MQTT_BROKER_HOST "10.11.30.190"
-#define MQTT_BROKER_PORT 1883
-#define MQTT_USER ""
-#define MQTT_PASS ""
-
-// Parâmetros da Rede Atual (Roteador e Sub-rede)
-#define NETWORK_GATEWAY "10.11.30.141"
-#define NETWORK_SUBNET "255.255.255.0"
-
-// 0 = Obtém IP automaticamente via DHCP (Recomendado) | 1 = Usa IP estático
-// fixo
-#define USAR_IP_ESTATICO 0
-#define STATIC_ESP32_IP "10.11.30.195"
-
-#elif defined(USAR_REDE_CASA)
-// --------------------------------------------------------------------------
-// PERFIL: REDE DE CASA
-// --------------------------------------------------------------------------
-#define WIFI_SSID "Luca"
-#define WIFI_PASSWORD "que1985@"
-
-// Endereço do Servidor / Broker MQTT na rede de casa
-#define MQTT_BROKER_HOST "192.168.31.220"
-#define MQTT_BROKER_PORT 1883
-#define MQTT_USER ""
-#define MQTT_PASS ""
-
-#define USAR_IP_ESTATICO 0
-
+#if __has_include("secrets.h")
+    #include "secrets.h"
 #else
-#error                                                                         \
-    "Por favor, selecione um perfil de rede em include/config.h (USAR_REDE_MACBOOK ou USAR_REDE_CASA)!"
+    #include "secrets.example.h"
 #endif
 
-// Tópicos MQTT Padronizados
-#define TOPIC_TELEMETRY "v1/devices/" DEVICE_ID "/telemetry"
-#define TOPIC_STATUS "v1/devices/" DEVICE_ID "/status"
-#define TOPIC_COMMANDS "v1/devices/" DEVICE_ID "/commands"
-#define TOPIC_ACK "v1/devices/" DEVICE_ID "/commands/ack"
+// Mapeamento de variáveis para compatibilidade
+#ifndef MQTT_BROKER_HOST
+    #define MQTT_BROKER_HOST MQTT_HOST
+#endif
+#ifndef MQTT_BROKER_PORT
+    #define MQTT_BROKER_PORT MQTT_PORT
+#endif
+#ifndef MQTT_USER
+    #define MQTT_USER MQTT_USERNAME
+#endif
+#ifndef MQTT_PASS
+    #define MQTT_PASS MQTT_PASSWORD
+#endif
 
-// Pinos dos Periféricos Hardware no ESP32
-#define PIN_DHT 15 // Sensor DHT22 / DHT11
+#ifndef USAR_IP_ESTATICO
+    #define USAR_IP_ESTATICO 0
+#endif
+
+// ==============================================================================
+// 2. IDENTIFICAÇÃO E CONVENÇÃO DE NAMESPACE DA DISCIPLINA (IFMG - IOT3)
+// Conforme Seções 7 e 8 da Apostila Prática da Etapa 1 (Prof. Charles Garrocho)
+// ==============================================================================
+#define IOT_TURMA        "turmaA"
+#define IOT_ALUNO        "daniel"
+#define IOT_DISPOSITIVO  "esp32_temp"
+
+#define DEVICE_ID        IOT_DISPOSITIVO
+#define MQTT_CLIENT_ID   "ifmg_iot3_" IOT_TURMA "_" IOT_ALUNO "_" IOT_DISPOSITIVO
+
+// Tópicos Oficiais Obrigatórios do IFMG
+#define TOPIC_TELEMETRY    "ifmg/iot3/" IOT_TURMA "/" IOT_ALUNO "/" IOT_DISPOSITIVO "/telemetry"
+#define TOPIC_COMMAND      "ifmg/iot3/" IOT_TURMA "/" IOT_ALUNO "/" IOT_DISPOSITIVO "/command"
+#define TOPIC_STATE        "ifmg/iot3/" IOT_TURMA "/" IOT_ALUNO "/" IOT_DISPOSITIVO "/state"
+#define TOPIC_AVAILABILITY "ifmg/iot3/" IOT_TURMA "/" IOT_ALUNO "/" IOT_DISPOSITIVO "/availability"
+
+// Aliases de compatibilidade
+#define TOPIC_COMMANDS     TOPIC_COMMAND
+#define TOPIC_STATUS       TOPIC_AVAILABILITY
+#define TOPIC_ACK          TOPIC_STATE
+
+// ==============================================================================
+// 3. PINOS DE PERIFÉRICOS E HARDWARE NO ESP32
+// ==============================================================================
+#define PIN_DHT 15               // Sensor DHT22 (Temperatura e Umidade)
 #define DHT_TYPE DHT22
 
-#define PIN_SOUND_ADC 34 // Sensor de Som Analógico (ADC1_CH6)
+#define PIN_SOUND_ADC 34         // Sensor de Som Analógico (ADC1_CH6)
 
-#define PIN_LED_ALERT 12      // LED de Sinalização/Alerta
-#define PIN_ACTUATOR_RELAY 14 // Relé / Cooler / Buzzer
+#define PIN_LED_ALERT 12         // LED de Sinalização / Alerta Visual
+#define PIN_ACTUATOR_RELAY 14    // Relé / Atuador de Potência (Cooler)
 
-// Limiares para Regras de Alerta Ambiental
+// ==============================================================================
+// 4. LIMIARES PARA REGRAS DE ALERTA AMBIENTAL
+// ==============================================================================
 #define TEMP_THRESHOLD_HIGH 30.0    // 30°C
 #define HUMIDITY_THRESHOLD_LOW 40.0 // 40%
-#define NOISE_ADC_THRESHOLD 700 // Leitura ADC equivalente a ruído alto (~70dB)
+#define NOISE_ADC_THRESHOLD 700     // ADC equivalente a ruído alto (~70dB)
 
-// Intervalo de Leitura e Publicação da Telemetria (ms)
+// Intervalo de leitura e publicação da telemetria (ms)
 #define TELEMETRY_INTERVAL_MS 5000
 
 #endif // CONFIG_H

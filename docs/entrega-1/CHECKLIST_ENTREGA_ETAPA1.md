@@ -11,14 +11,14 @@
 
 | Categoria | Total de Itens | ✅ Concluídos | ⚠️ Requerem Ajuste | ❌ Pendentes | % Conformidade |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **1. Marco Obrigatório (Seção 16.1)** | 15 | 7 | 5 | 3 | **60%** |
-| **2. Requisitos Mínimos (Seção 3.3)** | 9 | 6 | 3 | 0 | **78%** |
-| **3. Padrões de Tópicos e JSON (Seções 7 e 8)** | 4 | 0 | 4 | 0 | **30%** (Divergência de namespace) |
-| **4. Segurança e Arquivos (Seções 4.3, 4.4 e 15)** | 5 | 1 | 2 | 2 | **40%** |
-| **5. Anexos Oficiais (Anexos A, B e C)** | 3 | 0 | 1 | 2 | **33%** |
+| **1. Marco Obrigatório (Seção 16.1)** | 15 | 13 | 0 | 2 | **87%** |
+| **2. Requisitos Mínimos (Seção 3.3)** | 10 | 10 | 0 | 0 | **100%** |
+| **3. Padrões de Tópicos e JSON (Seções 7 e 8)** | 4 | 4 | 0 | 0 | **100%** |
+| **4. Segurança e Arquivos (Seções 4.3, 4.4 e 15)** | 5 | 5 | 0 | 0 | **100%** |
+| **5. Anexos Oficiais (Anexos A, B e C)** | 3 | 1 | 0 | 2 | **67%** |
 
-> [!IMPORTANT]
-> **Diagnóstico Geral**: O projeto possui um desenvolvimento de altíssimo nível (incluindo até backend em Node.js, Redis, simulador e frontend React), porém **possui divergências pontuais com a convenção exigida pelo professor na apostila**. Os tópicos MQTT estão em formato genérico (`v1/devices/...`) em vez do formato padronizado da disciplina (`ifmg/iot3/<turma>/<aluno>/<dispositivo>/...`), o payload de comando/ACK não segue os campos exatos (`requestId`, `action: set`, `target`, `availability`), e as credenciais Wi-Fi/MQTT estão no código aberto (`config.h`) em vez de estarem isoladas em `secrets.h` ignorado pelo `.gitignore`.
+> [!NOTE]
+> **Diagnóstico Geral Atualizado**: O código do firmware C++ e o backend foram **100% adequados às convenções da Apostila do Prof. Charles Garrocho**. Os tópicos MQTT agora adotam estritamente o namespace oficial (`ifmg/iot3/turmaA/daniel/esp32_temp/...`), os payloads JSON incluem todos os campos canônicos (`sequence`, `uptimeMs`, `wifiRssi`, `requestId`, `action: set`, `target`), a confirmação de estado é publicada com flag `retained = true` em `.../state`, a disponibilidade LWT publica strings `"online"` e `"offline"` com `retained = true`, e todas as credenciais foram isoladas com segurança em `secrets.h` ignorado pelo `.gitignore`. As únicas pendências restantes são operacionais/físicas: salvar os prints em bancada na pasta `docs/evidencias/` e realizar a demonstração prática.
 
 ---
 
@@ -28,85 +28,81 @@ Abaixo está a checagem detalhada dos **15 itens do Marco Obrigatório** estabel
 
 - [x] **1. Proposta do problema e justificativa**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Documentada em [`docs/entrega-1/PROPOSTA_PROJETO.md`](file:///c:/projects/alerta-temperatura/docs/entrega-1/PROPOSTA_PROJETO.md) e na Ficha de Proposta (Anexo A) abaixo.
+  - **Evidência**: Documentada em [`docs/entrega-1/PROPOSTA_PROJETO.md`](PROPOSTA_PROJETO.md) e na Ficha de Proposta (Anexo A) abaixo.
   - **Descrição**: Justificativa clara sobre monitoramento térmico, umidade e ruído para saúde ocupacional.
 
 - [x] **2. Diagrama completo da arquitetura prevista**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Documentado em [`docs/entrega-1/DIAGRAMA_ARQUITETURA.md`](file:///c:/projects/alerta-temperatura/docs/entrega-1/DIAGRAMA_ARQUITETURA.md).
+  - **Evidência**: Documentado em [`docs/entrega-1/DIAGRAMA_ARQUITETURA.md`](DIAGRAMA_ARQUITETURA.md).
   - **Descrição**: Contempla todo o fluxo ponta a ponta: *Sensor → ESP32 → Wi-Fi → MQTT Broker → Gateway → Banco Chave-Valor → Sistema Web → Usuário*.
 
 - [x] **3. Tabela de requisitos funcionais**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Presente em [`docs/entrega-1/PROPOSTA_PROJETO.md`](file:///c:/projects/alerta-temperatura/docs/entrega-1/PROPOSTA_PROJETO.md#L26-L35) e sintetizada na Seção 6 deste documento.
+  - **Evidência**: Presente em [`docs/entrega-1/PROPOSTA_PROJETO.md`](PROPOSTA_PROJETO.md#L26-L35) e sintetizada na Seção 6 deste documento.
   - **Descrição**: Requisitos de amostragem periódica, envio de telemetria, recepção de comandos remotos, LWT e renderização local.
 
-- [ ] **4. Tabela de tópicos MQTT**
-  - **Status**: ⚠️ **Requer Ajuste de Padrão**
-  - **O que existe**: Tópicos definidos no formato `v1/devices/{deviceId}/telemetry`, `v1/devices/{deviceId}/commands`, etc.
-  - **O que falta**: Adequar à convenção obrigatória do IFMG:
-    - Telemetria: `ifmg/iot3/<turma>/<aluno>/<dispositivo>/telemetry`
-    - Comandos: `ifmg/iot3/<turma>/<aluno>/<dispositivo>/command`
-    - Estado confirmado: `ifmg/iot3/<turma>/<aluno>/<dispositivo>/state`
-    - Disponibilidade: `ifmg/iot3/<turma>/<aluno>/<dispositivo>/availability`
+- [x] **4. Tabela de tópicos MQTT**
+  - **Status**: ✅ **Concluído**
+  - **Evidência**: Implementado em [`firmware/include/config.h`](../../firmware/include/config.h):
+    - Telemetria: `ifmg/iot3/turmaA/daniel/esp32_temp/telemetry`
+    - Comandos: `ifmg/iot3/turmaA/daniel/esp32_temp/command`
+    - Estado confirmado: `ifmg/iot3/turmaA/daniel/esp32_temp/state`
+    - Disponibilidade: `ifmg/iot3/turmaA/daniel/esp32_temp/availability`
 
-- [ ] **5. Especificação das mensagens JSON**
-  - **Status**: ⚠️ **Requer Ajuste de Padrão**
-  - **O que existe**: Documentado em [`docs/entrega-1/FLUXO_DADOS_E_MENSAGENS.md`](file:///c:/projects/alerta-temperatura/docs/entrega-1/FLUXO_DADOS_E_MENSAGENS.md).
-  - **O que falta**: Ajustar os campos para o formato canônico da apostila:
-    - Telemetria: incluir `deviceId`, `sensor`, `value`, `unit`, `sequence`, `uptimeMs`, `wifiRssi`.
-    - Comando: aceitar `action: "set"`, `target: "led"`, `value: true/false`, `requestId`.
-    - Confirmação de Estado: publicar em `.../state` com `deviceId`, `actuator`, `state`, `requestId` (com flag `retained = true`).
-    - Disponibilidade: publicar strings `"online"` / `"offline"` com `retained = true`.
+- [x] **5. Especificação das mensagens JSON**
+  - **Status**: ✅ **Concluído**
+  - **Evidência**: Implementado em [`firmware/src/main.cpp`](../../firmware/src/main.cpp) e [`backend/src/validators/schemas.ts`](../../backend/src/validators/schemas.ts):
+    - Telemetria: inclui `deviceId`, `sensor`, `value`, `unit`, `sequence`, `uptimeMs`, `wifiRssi`, `humidity`, `noiseLevel`.
+    - Comando: aceita `action: "set"`, `target: "led"`, `value: true/false`, `requestId`.
+    - Confirmação de Estado: publica em `.../state` com `deviceId`, `actuator`, `state`, `requestId` (`retained = true`).
+    - Disponibilidade: publica strings `"online"` / `"offline"` com `retained = true`.
 
 - [x] **6. Circuito com sensor e atuador funcionando localmente**
   - **Status**: ✅ **Concluído no Firmware**
-  - **Evidência**: Código implementado em [`firmware/src/sensor_manager.cpp`](file:///c:/projects/alerta-temperatura/firmware/src/sensor_manager.cpp) e [`firmware/src/actuator_manager.cpp`](file:///c:/projects/alerta-temperatura/firmware/src/actuator_manager.cpp).
+  - **Evidência**: Código implementado em [`firmware/src/sensor_manager.cpp`](../../firmware/src/sensor_manager.cpp) e [`firmware/src/actuator_manager.cpp`](../../firmware/src/actuator_manager.cpp).
   - **Descrição**: Leitura do DHT22 e ADC34, acionamento do LED (GPIO 12) e Relé (GPIO 14) com teste de acionamento imediato por limiar.
 
 - [x] **7. Conexão Wi-Fi e reconexão automática**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Implementado em [`firmware/src/wifi_manager.cpp`](file:///c:/projects/alerta-temperatura/firmware/src/wifi_manager.cpp).
+  - **Evidência**: Implementado em [`firmware/src/wifi_manager.cpp`](../../firmware/src/wifi_manager.cpp).
   - **Descrição**: Conexão não-bloqueante via `millis()` verificando `WiFi.status() == WL_CONNECTED` e exibição de IP, Gateway e Sub-rede no console serial.
 
 - [x] **8. Publicação de telemetria**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Implementado em [`firmware/src/main.cpp`](file:///c:/projects/alerta-temperatura/firmware/src/main.cpp#L77-L102) e [`firmware/src/mqtt_client.cpp`](file:///c:/projects/alerta-temperatura/firmware/src/mqtt_client.cpp#L55-L58).
-  - **Descrição**: Publicação periódica a cada 5 segundos de payload JSON gerado com `ArduinoJson`.
+  - **Evidência**: Implementado em [`firmware/src/main.cpp`](../../firmware/src/main.cpp) e [`firmware/src/mqtt_client.cpp`](../../firmware/src/mqtt_client.cpp).
+  - **Descrição**: Publicação periódica a cada 5 segundos de payload JSON gerado com `ArduinoJson`, com número de sequência e uptime.
 
 - [x] **9. Recepção de comando**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Implementado em [`firmware/src/main.cpp`](file:///c:/projects/alerta-temperatura/firmware/src/main.cpp#L13-L37).
-  - **Descrição**: Callback MQTT com validação de payload e acionamento físico do atuador.
+  - **Evidência**: Implementado em [`firmware/src/main.cpp`](../../firmware/src/main.cpp).
+  - **Descrição**: Callback MQTT com validação de payload canônico (`action`, `target`, `value`, `requestId`) e acionamento físico do atuador.
 
-- [ ] **10. Publicação de estado confirmado**
-  - **Status**: ⚠️ **Requer Ajuste de Padrão**
-  - **O que existe**: O firmware envia confirmação para `v1/devices/{deviceId}/commands/ack` sem flag retained.
-  - **O que falta**: Publicar a confirmação no tópico oficial `.../state` com flag `retained = true` e os campos `deviceId`, `actuator`, `state`, `requestId`.
+- [x] **10. Publicação de estado confirmado**
+  - **Status**: ✅ **Concluído**
+  - **Evidência**: Implementado em [`firmware/src/mqtt_client.cpp`](../../firmware/src/mqtt_client.cpp) (`publishState`).
+  - **Descrição**: O firmware envia confirmação para `ifmg/iot3/turmaA/daniel/esp32_temp/state` com flag `retained = true` e campos `deviceId`, `actuator`, `state`, `requestId`.
 
 - [x] **11. Tratamento de JSON inválido**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Callback em [`firmware/src/main.cpp`](file:///c:/projects/alerta-temperatura/firmware/src/main.cpp#L15-L21) checa `DeserializationError error = deserializeJson(...)` e aborta a execução sem travar o ESP32.
+  - **Evidência**: Callback em [`firmware/src/main.cpp`](../../firmware/src/main.cpp) checa `DeserializationError error = deserializeJson(...)` e aborta a execução com mensagem de aviso sem travar o ESP32.
 
-- [ ] **12. Código-fonte organizado e seguro**
-  - **Status**: ⚠️ **Requer Ajuste de Segurança**
-  - **O que existe**: Código modular em C++ com PlatformIO.
-  - **O que falta**:
-    1. Criar `firmware/include/secrets.h` para armazenar `WIFI_SSID`, `WIFI_PASSWORD`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`.
-    2. Adicionar `secrets.h` ao [`.gitignore`](file:///c:/projects/alerta-temperatura/.gitignore).
-    3. Criar `firmware/include/secrets.example.h` como modelo sem credenciais reais.
-    4. Remover credenciais pessoais gravadas em texto plano no [`firmware/include/config.h`](file:///c:/projects/alerta-temperatura/firmware/include/config.h).
+- [x] **12. Código-fonte organizado e seguro**
+  - **Status**: ✅ **Concluído**
+  - **Evidência**:
+    1. Arquivo `firmware/include/secrets.h` criado isolando `WIFI_SSID`, `WIFI_PASSWORD`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`.
+    2. Adicionado `secrets.h` e `firmware/include/secrets.h` ao [`.gitignore`](../../.gitignore).
+    3. Arquivo modelo público [`firmware/include/secrets.example.h`](../../firmware/include/secrets.example.h) criado sem credenciais reais.
+    4. Credenciais e senhas em texto puro completamente removidas de [`firmware/include/config.h`](../../firmware/include/config.h).
 
 - [x] **13. README com instruções de execução**
   - **Status**: ✅ **Concluído**
-  - **Evidência**: Documentado em [`README.md`](file:///c:/projects/alerta-temperatura/README.md) e [`firmware/README.md`](file:///c:/projects/alerta-temperatura/firmware/README.md).
+  - **Evidência**: Documentado em [`README.md`](../../README.md) e [`firmware/README.md`](../../firmware/README.md).
   - **Descrição**: Instruções passo a passo para compilação via PlatformIO, subida dos serviços Docker e testes.
 
 - [ ] **14. Registro de testes e evidências**
-  - **Status**: ❌ **Pendente de Documentação e Capturas**
+  - **Status**: ❌ **Pendente de Capturas de Tela em Bancada**
   - **O que falta**:
-    1. Preencher a tabela formal de testes T01 a T08 (Anexo B).
-    2. Criar a pasta `evidencias/` com os prints:
+    1. Executar os ensaios no hardware físico e salvar os prints na pasta [`docs/evidencias/`](../evidencias/README.md):
        - `wifi_conectado.png`: Monitor Serial com IP, Gateway e RSSI.
        - `mqtt_publicacao.png`: MQTT Explorer exibindo tópico de telemetria e availability "online".
        - `mqtt_comando.png`: MQTT Explorer enviando comando e recebendo confirmação em `state`.
@@ -125,10 +121,10 @@ Abaixo está a checagem detalhada dos **15 itens do Marco Obrigatório** estabel
 | **Sensor simples (digital ou analógico)** | Sensor DHT22 (Digital GPIO 15) + Som ADC (GPIO 34) | ✅ Atendido | Supera o requisito mínimo (possui 2 sensores). |
 | **Atuador simples e seguro** | LED de Alerta (GPIO 12) e Relé/Cooler (GPIO 14) | ✅ Atendido | Acionamento seguro em baixa potência. |
 | **Conexão Wi-Fi com recuperação** | `WiFiManager` com reconexão periódica não-bloqueante | ✅ Atendido | Utiliza `millis()` a cada 5s sem travar o loop. |
-| **Publicação MQTT de telemetria** | `PubSubClient` publicando JSON a cada 5 segundos | ⚠️ Ajustar | Necessário ajustar tópico e campos do JSON. |
-| **Assinatura MQTT para comando do atuador** | Inscrição no tópico de comandos no `connect` | ⚠️ Ajustar | Reassinar após reconexão e usar namespace IFMG. |
-| **Mensagens em JSON para telemetria** | Biblioteca `ArduinoJson v6` | ⚠️ Ajustar | Payload pronto, necessita incluir campos padrão. |
-| **Tópicos com turma, estudante e dispositivo** | Namespace: `ifmg/iot3/<turma>/<aluno>/<dispositivo>/...` | ⚠️ Ajustar | Atualmente usa `v1/devices/{deviceId}/...`. |
+| **Publicação MQTT de telemetria** | `PubSubClient` publicando JSON a cada 5 segundos | ✅ Atendido | Tópico oficial IFMG e payload canônico com sequência e uptime. |
+| **Assinatura MQTT para comando do atuador** | Inscrição no tópico de comandos no `connect` | ✅ Atendido | Reassina após reconexão e usa namespace IFMG com QoS 1. |
+| **Mensagens em JSON para telemetria** | Biblioteca `ArduinoJson v6` | ✅ Atendido | Payload canônico completo gerado com serialização JSON. |
+| **Tópicos com turma, estudante e dispositivo** | Namespace: `ifmg/iot3/<turma>/<aluno>/<dispositivo>/...` | ✅ Atendido | Totalmente parametrizado em `config.h`. |
 | **Monitor serial com diagnósticos** | Logs detalhados em 115200 bps | ✅ Atendido | Exibe IP, MAC, RSSI, Status MQTT e estados. |
 | **Diagrama e documentação de fluxo** | Diagrama de arquitetura e sequência documentados | ✅ Atendido | Mermaid e diagramas em bloco prontos. |
 
@@ -136,22 +132,11 @@ Abaixo está a checagem detalhada dos **15 itens do Marco Obrigatório** estabel
 
 ## 🔒 4. Checklist de Segurança e Credenciais (Seções 4.4 e 15)
 
-- [ ] **Criar `firmware/include/secrets.h`**:
-  ```cpp
-  #ifndef SECRETS_H
-  #define SECRETS_H
-  const char* WIFI_SSID = "NOME_DA_REDE";
-  const char* WIFI_PASSWORD = "SENHA_DA_REDE";
-  const char* MQTT_HOST = "ENDERECO_DO_BROKER";
-  const int MQTT_PORT = 1883;
-  const char* MQTT_USERNAME = "";
-  const char* MQTT_PASSWORD = "";
-  #endif
-  ```
-- [ ] **Criar modelo público `firmware/include/secrets.example.h`** sem credenciais reais para controle de versão.
-- [ ] **Incluir `secrets.h` no [`.gitignore`](file:///c:/projects/alerta-temperatura/.gitignore)** para evitar vazamento em repositórios Git públicos.
-- [ ] **Limpar senhas pessoais** atualmente expostas no arquivo [`firmware/include/config.h`](file:///c:/projects/alerta-temperatura/firmware/include/config.h).
-- [ ] **Garantir que mensagens de erro na Serial não imprimam senhas ou tokens** (Item 70 da apostila).
+- [x] **Criar `firmware/include/secrets.h`** isolado com credenciais de rede.
+- [x] **Criar modelo público `firmware/include/secrets.example.h`** sem credenciais reais para controle de versão.
+- [x] **Incluir `secrets.h` no [`.gitignore`](../../.gitignore)** para evitar vazamento em repositórios Git públicos.
+- [x] **Limpar senhas pessoais** que estavam expostas no arquivo [`firmware/include/config.h`](../../firmware/include/config.h).
+- [x] **Garantir que mensagens de erro na Serial não imprimam senhas ou tokens** (Item 70 da apostila).
 
 ---
 

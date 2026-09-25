@@ -9,32 +9,32 @@ static unsigned long lastMqttReconnectAttempt = 0;
 void MQTTClientManager::setup(void (*commandCallback)(char*, byte*, unsigned int)) {
     client.setServer(MQTT_BROKER_HOST, MQTT_BROKER_PORT);
     client.setCallback(commandCallback);
+    client.setBufferSize(512); // Amplia buffer para suportar payloads JSON completos
 }
 
 void MQTTClientManager::reconnect() {
     unsigned long now = millis();
     if (now - lastMqttReconnectAttempt > 5000) {
         lastMqttReconnectAttempt = now;
-        Serial.println("Tentando conexão MQTT...");
+        Serial.println("[MQTT] Tentando conexão ao broker...");
+        Serial.print("[MQTT] Broker: "); Serial.print(MQTT_BROKER_HOST);
+        Serial.print(":"); Serial.println(MQTT_BROKER_PORT);
+        Serial.print("[MQTT] Client ID: "); Serial.println(MQTT_CLIENT_ID);
 
-        // Payload de LWT (Last Will and Testament) em JSON (QoS 1, Retain True)
-        StaticJsonDocument<128> lwtDoc;
-        lwtDoc["status"] = "offline";
-        lwtDoc["reason"] = "unexpected_disconnect";
-        lwtDoc["timestamp"] = millis() / 1000;
-        char lwtBuffer[128];
-        serializeJson(lwtDoc, lwtBuffer);
-
-        if (client.connect(DEVICE_ID, MQTT_USER, MQTT_PASS, TOPIC_STATUS, 1, true, lwtBuffer)) {
-            Serial.println("MQTT Conectado com sucesso!");
+        // LWT (Last Will and Testament) conforme Seção 8.4 da Apostila IFMG:
+        // Tópico: .../availability, QoS: 1, Retain: true, Payload: "offline"
+        if (client.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS, TOPIC_AVAILABILITY, 1, true, "offline")) {
+            Serial.println("[MQTT] >>> Conectado com sucesso! <<<");
             
-            // Publica status Online
+            // Publica status Online imediatamente com Retain True
             publishStatusOnline();
 
-            // Subscreve ao tópico de comandos
-            client.subscribe(TOPIC_COMMANDS, 1);
+            // Subscreve ao tópico de comandos com QoS 1
+            client.subscribe(TOPIC_COMMAND, 1);
+            Serial.print("[MQTT] Inscrito no tópico de comandos: ");
+            Serial.println(TOPIC_COMMAND);
         } else {
-            Serial.print("Falha MQTT, rc=");
+            Serial.print("[MQTT] Falha na conexão, rc=");
             Serial.println(client.state());
         }
     }
@@ -60,27 +60,45 @@ bool MQTTClientManager::publishTelemetry(const char* jsonPayload) {
 bool MQTTClientManager::publishStatusOnline() {
     if (!client.connected()) return false;
 
-    StaticJsonDocument<256> doc;
-    doc["status"] = "online";
-    doc["ip"] = WiFi.localIP().toString();
-    doc["firmwareVersion"] = "1.0.0";
-    doc["uptime"] = millis() / 1000;
-
-    char buffer[256];
-    serializeJson(doc, buffer);
-    return client.publish(TOPIC_STATUS, buffer, true);
+    // Conforme Seção 8.4 da Apostila do IFMG:
+    // String simples "online" com flag retained = true
+    bool ok = client.publish(TOPIC_AVAILABILITY, "online", true);
+    if (ok) {
+        Serial.print("[MQTT] Disponibilidade publicada ('online', Retain=true) em: ");
+        Serial.println(TOPIC_AVAILABILITY);
+    }
+    return ok;
 }
 
-bool MQTTClientManager::publishACK(const char* commandId, bool success, bool state) {
+bool MQTTClientManager::publishState(const char* actuator, bool state, const char* requestId) {
     if (!client.connected()) return false;
 
+    // Conforme Seção 8.3 da Apostila do IFMG:
+    // Payload JSON publicado no tópico .../state com flag retained = true
     StaticJsonDocument<256> doc;
-    doc["commandId"] = commandId;
-    doc["success"] = success;
+    doc["deviceId"] = DEVICE_ID;
+    doc["actuator"] = (actuator && strlen(actuator) > 0) ? actuator : "led";
     doc["state"] = state;
+    if (requestId && strlen(requestId) > 0) {
+        doc["requestId"] = requestId;
+    }
     doc["timestamp"] = millis() / 1000;
 
     char buffer[256];
     serializeJson(doc, buffer);
-    return client.publish(TOPIC_ACK, buffer, false);
+
+    bool ok = client.publish(TOPIC_STATE, buffer, true);
+    if (ok) {
+        Serial.print("[MQTT] Estado confirmado ('state', Retain=true) em ");
+        Serial.print(TOPIC_STATE);
+        Serial.print(": ");
+        Serial.println(buffer);
+    }
+    return ok;
 }
+
+bool MQTTClientManager::publishACK(const char* commandId, bool success, bool state) {
+    // Mantém compatibilidade com chamadas legadas encaminhando para publishState
+    return publishState("actuator", state, commandId);
+}
+

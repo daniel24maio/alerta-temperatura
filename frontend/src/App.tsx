@@ -74,13 +74,37 @@ function getLuminosityEvaluation(lux: number | undefined) {
 }
 
 export function App() {
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('esp32_temp');
+  const [availableDevices, setAvailableDevices] = useState<string[]>(['esp32_temp', 'esp32-temp-01']);
   const [device, setDevice] = useState<DeviceRecord | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isLoadingCommand, setIsLoadingCommand] = useState(false);
 
-  const fetchDeviceData = async () => {
+  const fetchDeviceList = async () => {
     try {
-      const res = await fetch(`${API_BASE}/devices/esp32-temp-01`, {
+      const res = await fetch(`${API_BASE}/devices`, {
+        headers: { Authorization: AUTH_HEADER },
+      });
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list) && list.length > 0) {
+          const ids = list.map((d: any) => d.deviceId);
+          setAvailableDevices(ids);
+          // Prioriza o dispositivo online, dando preferência a esp32_temp
+          const onlineDev = list.find((d: any) => d.status === 'online');
+          if (onlineDev && !list.find((d: any) => d.deviceId === selectedDeviceId && d.status === 'online')) {
+            setSelectedDeviceId(onlineDev.deviceId);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao listar dispositivos:', err);
+    }
+  };
+
+  const fetchDeviceData = async (targetId = selectedDeviceId) => {
+    try {
+      const res = await fetch(`${API_BASE}/devices/${targetId}`, {
         headers: { Authorization: AUTH_HEADER },
       });
       if (res.ok) {
@@ -92,9 +116,9 @@ export function App() {
     }
   };
 
-  const fetchHistory = async () => {
+  const fetchHistory = async (targetId = selectedDeviceId) => {
     try {
-      const res = await fetch(`${API_BASE}/devices/esp32-temp-01/history?limit=100`, {
+      const res = await fetch(`${API_BASE}/devices/${targetId}/history?limit=100`, {
         headers: { Authorization: AUTH_HEADER },
       });
       if (res.ok) {
@@ -108,7 +132,7 @@ export function App() {
 
   const handleExportCSV = async () => {
     try {
-      const res = await fetch(`${API_BASE}/devices/esp32-temp-01/history/export`, {
+      const res = await fetch(`${API_BASE}/devices/${selectedDeviceId}/history/export`, {
         headers: { Authorization: AUTH_HEADER },
       });
       if (!res.ok) throw new Error('Erro ao exportar CSV');
@@ -116,7 +140,7 @@ export function App() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `telemetria-esp32-temp-01-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `telemetria-${selectedDeviceId}-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -134,18 +158,18 @@ export function App() {
 
     setIsLoadingCommand(true);
     try {
-      const res = await fetch(`${API_BASE}/devices/esp32-temp-01/command`, {
+      const res = await fetch(`${API_BASE}/devices/${selectedDeviceId}/command`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: AUTH_HEADER,
         },
-        body: JSON.stringify({ action: 'SET_ACTUATOR', state: newState }),
+        body: JSON.stringify({ action: 'set', target: 'led', state: newState, value: newState }),
       });
 
       const result = await res.json();
       if (res.ok && result.success) {
-        alert(`✅ Comando confirmado com sucesso pelo ESP32 (ACK)! Atuador: ${newState ? 'LIGADO' : 'DESLIGADO'}`);
+        alert(`✅ Comando confirmado com sucesso pelo ESP32 (ACK/State)! Atuador: ${newState ? 'LIGADO' : 'DESLIGADO'}`);
         fetchDeviceData();
       } else {
         alert(`❌ Falha no envio: ${result.message || 'Timeout de resposta ACK do dispositivo.'}`);
@@ -158,14 +182,16 @@ export function App() {
   };
 
   useEffect(() => {
+    fetchDeviceList();
     fetchDeviceData();
     fetchHistory();
     const interval = setInterval(() => {
+      fetchDeviceList();
       fetchDeviceData();
       fetchHistory();
     }, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedDeviceId]);
 
   const state = device?.state;
   const temp = state?.temp || 0;
@@ -187,7 +213,22 @@ export function App() {
           </h1>
         </div>
 
-        <DeviceBadge status={device?.status || 'offline'} lastSeen={device?.lastSeen} />
+        <div className="flex items-center gap-3">
+          {availableDevices.length > 1 && (
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
+            >
+              {availableDevices.map((id) => (
+                <option key={id} value={id}>
+                  {id} {id === 'esp32_temp' ? '(Padrão IFMG)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <DeviceBadge status={device?.status || 'offline'} lastSeen={device?.lastSeen} />
+        </div>
       </header>
 
       {/* Main Container */}

@@ -5,17 +5,16 @@ const DEVICE_ID = 'esp32-temp-01';
 
 console.log(`[Simulador ESP32] Conectando ao broker: ${BROKER_URL}...`);
 
-const lwtPayload = JSON.stringify({
-  status: 'offline',
-  reason: 'unexpected_disconnect',
-  timestamp: Math.floor(Date.now() / 1000),
-});
+const IFMG_TOPIC_TELEMETRY = 'ifmg/iot3/turmaA/daniel/esp32_temp/telemetry';
+const IFMG_TOPIC_AVAILABILITY = 'ifmg/iot3/turmaA/daniel/esp32_temp/availability';
+const IFMG_TOPIC_COMMAND = 'ifmg/iot3/turmaA/daniel/esp32_temp/command';
+const IFMG_TOPIC_STATE = 'ifmg/iot3/turmaA/daniel/esp32_temp/state';
 
 const client = mqtt.connect(BROKER_URL, {
-  clientId: DEVICE_ID,
+  clientId: 'ifmg_iot3_turmaA_daniel_esp32_temp_sim',
   will: {
-    topic: `v1/devices/${DEVICE_ID}/status`,
-    payload: Buffer.from(lwtPayload),
+    topic: IFMG_TOPIC_AVAILABILITY,
+    payload: Buffer.from('offline'),
     qos: 1,
     retain: true,
   },
@@ -25,10 +24,14 @@ let actuatorState = false;
 let currentTemp = 26.5;
 let currentHumidity = 55.0;
 let currentNoise = 48;
+let sequence = 0;
 
 client.on('connect', () => {
   console.log(`[Simulador ESP32] Conectado ao Broker! Dispositivo: ${DEVICE_ID}`);
 
+  // Disponibilidade padrão IFMG
+  client.publish(IFMG_TOPIC_AVAILABILITY, 'online', { qos: 1, retain: true });
+  // Disponibilidade legada
   const onlinePayload = JSON.stringify({
     status: 'online',
     ip: process.env.DEVICE_IP || '10.11.30.190',
@@ -38,9 +41,9 @@ client.on('connect', () => {
   });
   client.publish(`v1/devices/${DEVICE_ID}/status`, onlinePayload, { qos: 1, retain: true });
 
-  client.subscribe(`v1/devices/${DEVICE_ID}/commands`, { qos: 1 }, (err) => {
+  client.subscribe([`v1/devices/${DEVICE_ID}/commands`, IFMG_TOPIC_COMMAND], { qos: 1 }, (err) => {
     if (!err) {
-      console.log(`[Simulador ESP32] Inscrito em: v1/devices/${DEVICE_ID}/commands`);
+      console.log(`[Simulador ESP32] Inscrito em: ${IFMG_TOPIC_COMMAND} e v1/devices/${DEVICE_ID}/commands`);
     }
   });
 
@@ -52,20 +55,33 @@ client.on('connect', () => {
 client.on('message', (topic, message) => {
   try {
     const cmd = JSON.parse(message.toString());
-    console.log(`\n[Simulador ESP32] ⚡ Comando Recebido: ID=${cmd.commandId} Action=${cmd.action} State=${cmd.state}`);
+    const action = cmd.action;
+    const targetState = cmd.value !== undefined ? cmd.value : cmd.state;
+    const reqId = cmd.requestId || cmd.commandId || 'req_sim';
 
-    if (cmd.action === 'SET_ACTUATOR') {
-      actuatorState = cmd.state;
+    console.log(`\n[Simulador ESP32] ⚡ Comando Recebido em ${topic}: ID=${reqId} Action=${action} State=${targetState}`);
 
+    if (action === 'set' || action === 'SET_ACTUATOR') {
+      actuatorState = targetState;
+
+      // Confirmação State padrão IFMG
+      const statePayload = JSON.stringify({
+        deviceId: 'esp32_temp',
+        actuator: cmd.target || 'led',
+        state: actuatorState,
+        requestId: reqId,
+      });
+      client.publish(IFMG_TOPIC_STATE, statePayload, { qos: 1, retain: true });
+
+      // Confirmação legada
       const ackPayload = JSON.stringify({
-        commandId: cmd.commandId,
+        commandId: reqId,
         success: true,
         state: actuatorState,
         timestamp: Math.floor(Date.now() / 1000),
       });
-
       client.publish(`v1/devices/${DEVICE_ID}/commands/ack`, ackPayload, { qos: 1 });
-      console.log(`[Simulador ESP32] ✅ ACK Publicado! Atuador: ${actuatorState ? 'LIGADO' : 'DESLIGADO'}\n`);
+      console.log(`[Simulador ESP32] ✅ Estado Confirmado publicado em ${IFMG_TOPIC_STATE}! Atuador: ${actuatorState ? 'LIGADO' : 'DESLIGADO'}\n`);
       
       sendTelemetry();
     }
@@ -98,10 +114,18 @@ function sendTelemetry() {
     actuatorState = true;
   }
 
+  sequence++;
   const payload = JSON.stringify({
-    temp: parseFloat(currentTemp.toFixed(1)),
+    deviceId: 'esp32_temp',
+    sensor: 'dht22_temperatura',
+    value: parseFloat(currentTemp.toFixed(1)),
+    unit: 'C',
     humidity: parseFloat(currentHumidity.toFixed(1)),
     noiseLevel: currentNoise,
+    sequence,
+    uptimeMs: process.uptime() * 1000,
+    wifiRssi: -58,
+    temp: parseFloat(currentTemp.toFixed(1)),
     alerts: alertCode !== 'NONE' ? [alertCode] : [],
     lcdText,
     displayType: 'ST7789_SPI',
@@ -109,6 +133,8 @@ function sendTelemetry() {
     timestamp: Math.floor(Date.now() / 1000),
   });
 
+  client.publish(IFMG_TOPIC_TELEMETRY, payload, { qos: 1 });
   client.publish(`v1/devices/${DEVICE_ID}/telemetry`, payload, { qos: 1 });
-  console.log(`[Simulador Telemetria] T: ${currentTemp.toFixed(1)}°C | U: ${currentHumidity.toFixed(1)}% | Som: ${currentNoise}dB | Tela: "${lcdText}"`);
+  console.log(`[Simulador Telemetria #${sequence}] T: ${currentTemp.toFixed(1)}°C | U: ${currentHumidity.toFixed(1)}% | Som: ${currentNoise}dB | Tela: "${lcdText}"`);
 }
+
