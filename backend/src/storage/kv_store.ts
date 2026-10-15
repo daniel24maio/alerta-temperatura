@@ -64,7 +64,7 @@ class KeyValueStore {
     if (this.isUsingRedis && this.redis) {
       try {
         await this.redis.lpush(key, value);
-        await this.redis.ltrim(key, 0, 999);
+        await this.redis.ltrim(key, 0, 4999);
         return;
       } catch {
         this.isUsingRedis = false;
@@ -74,7 +74,7 @@ class KeyValueStore {
     const currentListStr = this.memoryStore.get(key);
     let list: string[] = currentListStr ? JSON.parse(currentListStr) : [];
     list.unshift(value);
-    if (list.length > 1000) list = list.slice(0, 1000);
+    if (list.length > 5000) list = list.slice(0, 5000);
     this.memoryStore.set(key, JSON.stringify(list));
   }
 
@@ -152,21 +152,24 @@ class KeyValueStore {
     const presenceKey = `device:${deviceId}:presence`;
     const existing = await this.getDeviceRecord(deviceId);
 
+    const now = new Date().toISOString();
+    const telemetryWithDate = {
+      ...payload,
+      recordedAt: payload.recordedAt || now,
+    };
+
     const record: DeviceRecord = {
       deviceId,
       status: existing?.status || 'online',
-      lastSeen: new Date().toISOString(),
+      lastSeen: now,
       ip: existing?.ip,
       firmwareVersion: existing?.firmwareVersion,
-      state: payload,
+      state: telemetryWithDate,
     };
     await this.set(presenceKey, JSON.stringify(record));
 
     const historyKey = `device:${deviceId}:history`;
-    await this.lpush(historyKey, JSON.stringify({
-      ...payload,
-      recordedAt: new Date().toISOString(),
-    }));
+    await this.lpush(historyKey, JSON.stringify(telemetryWithDate));
   }
 
   async getDeviceRecord(deviceId: string): Promise<DeviceRecord | null> {
@@ -194,10 +197,27 @@ class KeyValueStore {
     return records;
   }
 
-  async getDeviceHistory(deviceId: string, limit = 100): Promise<any[]> {
-    const clampedLimit = Math.max(1, Math.min(limit, 1000));
-    const rawList = await this.lrange(`device:${deviceId}:history`, 0, clampedLimit - 1);
-    return rawList.map((item) => JSON.parse(item));
+  async getDeviceHistory(deviceId: string, limit = 100, dateFilter?: string): Promise<any[]> {
+    const clampedLimit = Math.max(1, Math.min(limit, 5000));
+    const scanLimit = dateFilter ? 5000 : clampedLimit;
+    const rawList = await this.lrange(`device:${deviceId}:history`, 0, scanLimit - 1);
+    let items = rawList.map((item) => JSON.parse(item));
+
+    if (dateFilter) {
+      items = items.filter((item) => {
+        if (!item.recordedAt) return false;
+        const itemDateIso = item.recordedAt.slice(0, 10);
+        const d = new Date(item.recordedAt);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const itemDateLocal = `${y}-${m}-${day}`;
+        return itemDateIso === dateFilter || itemDateLocal === dateFilter;
+      });
+      return items.slice(0, clampedLimit);
+    }
+
+    return items;
   }
 }
 

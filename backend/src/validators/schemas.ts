@@ -17,6 +17,7 @@ export const telemetrySchema = z.object({
   displayType: z.string().optional(),
   actuatorState: z.boolean().default(false),
   timestamp: z.number().optional(),
+  recordedAt: z.string().optional(),
 }).transform(val => ({
   ...val,
   temp: val.temp ?? val.value ?? 0,

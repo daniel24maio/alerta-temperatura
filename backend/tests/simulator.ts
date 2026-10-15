@@ -94,24 +94,24 @@ function sendTelemetry() {
   currentTemp += (Math.random() - 0.48) * 0.5;
   currentHumidity += (Math.random() - 0.5) * 0.8;
 
-  let alertCode = 'NONE';
-  let lcdText = 'Ambiente OK - Condicoes ideais';
+  const nonConforming: string[] = [];
+  if (currentTemp > 30.0) {
+    nonConforming.push('TEMPERATURA');
+  }
+  if (currentHumidity < 40.0) {
+    nonConforming.push('UMIDADE');
+  }
+  if (currentNoise > 75) {
+    nonConforming.push('RUIDO');
+  }
 
-  if (currentTemp > 30.0 && currentHumidity < 40.0) {
-    alertCode = 'CRITICAL_HEAT_DRY';
-    lcdText = 'CRITICO: Temp/Umid! Hidratar & ativ. baixa intens.';
-    actuatorState = true;
-  } else if (currentTemp > 30.0) {
-    alertCode = 'HIGH_TEMP';
-    lcdText = 'ALERTA: Temp >30C! Beba agua & ar em circulacao';
-    actuatorState = true;
-  } else if (currentTemp >= 18.0 && currentTemp <= 30.0 && currentHumidity < 40.0) {
-    alertCode = 'LOW_HUMIDITY_MILD';
-    lcdText = 'ALERTA: Baixa umid! Hidrate-se / Evite ex. intenso';
-  } else if (currentNoise > 75) {
-    alertCode = 'HIGH_NOISE';
-    lcdText = 'ALERTA: Ruido alto! Favor manter silencio no local';
-    actuatorState = true;
+  let alertCode = 'NONE';
+  let lcdText = 'AMBIENTE EM CONFORMIDADE';
+
+  if (nonConforming.length > 0) {
+    alertCode = `${nonConforming[0]}_FORA_CONFORMIDADE`;
+    lcdText = `FORA DE CONFORMIDADE: ${nonConforming.join(', ')}`;
+    actuatorState = true; // Se qualquer um dos índices estiver fora de conformidade, liga o atuador
   }
 
   sequence++;

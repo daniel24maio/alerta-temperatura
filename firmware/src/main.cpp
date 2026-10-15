@@ -88,10 +88,11 @@ void loop() {
         // Leitura dos sensores e avaliação das regras
         SensorData sensorData = SensorManager::readSensors();
 
-        // Se a regra exigir atuador ativado (ex: Temperatura > 30C ou Ruído alto), atualiza o estado
+        // Se qualquer um dos índices estiver fora de conformidade, liga o atuador automaticamente
         if (sensorData.requiresActuator && !ActuatorManager::getActuatorState()) {
             ActuatorManager::setActuatorState(true);
             MQTTClientManager::publishState("led", true, "auto-rule-alert");
+            Serial.println("[ATUADOR] Condição anormal detectada: Atuador LIGADO automaticamente.");
         }
 
         // Renderização no Display TFT ST7789

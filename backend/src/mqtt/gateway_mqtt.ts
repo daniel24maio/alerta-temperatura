@@ -12,6 +12,8 @@ interface PendingCommand {
 class GatewayMQTTService {
   private client: MqttClient | null = null;
   private pendingCommands: Map<string, PendingCommand> = new Map();
+  private lastAutoCommandTime: Map<string, number> = new Map();
+  private autoTriggeredDevices: Set<string> = new Set();
   public isConnected = false;
 
   connect(): void {
@@ -84,10 +86,57 @@ class GatewayMQTTService {
       if (subtopic === 'telemetry') {
         const rawJson = JSON.parse(messageStr);
         const parsed = telemetrySchema.parse(rawJson);
+
+        // Avaliação de conformidade ambiental: reflete o status do ambiente informando somente o item fora da conformidade
+        const nonConforming: string[] = [];
+        if (parsed.temp > 30) nonConforming.push('Temperatura');
+        if (parsed.humidity < 40) nonConforming.push('Umidade');
+        if (parsed.noiseLevel > 75) nonConforming.push('Ruído');
+        if (parsed.lux !== undefined && parsed.lux > 0 && (parsed.lux < 100 || parsed.lux > 1500)) {
+          nonConforming.push('Luminosidade');
+        }
+
+        const isConform = nonConforming.length === 0;
+        parsed.lcdText = isConform
+          ? 'AMBIENTE EM CONFORMIDADE'
+          : `FORA DE CONFORMIDADE: ${nonConforming.join(', ').toUpperCase()}`;
+        parsed.alerts = isConform
+          ? []
+          : nonConforming.map((item) => `${item.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}_FORA_CONFORMIDADE`);
+
+        // Quando algum dos índices estiver fora de conformidade, liga o atuador fisicamente no hardware e no estado
+        if (!isConform) {
+          parsed.actuatorState = true;
+          const now = Date.now();
+          const lastCmd = this.lastAutoCommandTime.get(deviceId) || 0;
+          if (!rawJson.actuatorState && now - lastCmd > 4000) {
+            this.lastAutoCommandTime.set(deviceId, now);
+            this.autoTriggeredDevices.add(deviceId);
+            console.log(`[MQTT Gateway] ⚡ Condição anormal detectada em [${deviceId}] (${nonConforming.join(', ')}). Enviando comando MQTT para LIGAR atuador físico...`);
+            this.sendCommand(deviceId, 'set', true).catch((err) => {
+              console.warn(`[MQTT Gateway] Aviso ao enviar comando automático para [${deviceId}]:`, err.message || err);
+            });
+          }
+        } else if (isConform && this.autoTriggeredDevices.has(deviceId)) {
+          const now = Date.now();
+          const lastCmd = this.lastAutoCommandTime.get(deviceId) || 0;
+          if (now - lastCmd > 4000) {
+            this.lastAutoCommandTime.set(deviceId, now);
+            this.autoTriggeredDevices.delete(deviceId);
+            console.log(`[MQTT Gateway] 🌿 Ambiente voltou à conformidade em [${deviceId}]. Enviando comando MQTT para DESLIGAR atuador físico...`);
+            this.sendCommand(deviceId, 'set', false).catch((err) => {
+              console.warn(`[MQTT Gateway] Aviso ao desligar atuador em [${deviceId}]:`, err.message || err);
+            });
+          }
+        }
+
         await kvStore.saveTelemetry(deviceId, parsed);
         const luxStr = parsed.lux !== undefined ? ` | Lux: ${parsed.lux} lx` : '';
         const seqStr = parsed.sequence !== undefined ? ` | Seq: #${parsed.sequence}` : '';
-        console.log(`[MQTT Telemetria] [${deviceId}] Temp: ${parsed.temp}°C | Umid: ${parsed.humidity}% | Ruído: ${parsed.noiseLevel}dB${luxStr}${seqStr}`);
+        const statusLog = isConform
+          ? 'Ambiente em Conformidade'
+          : `Alerta: Fora de Conformidade (${nonConforming.join(', ')})`;
+        console.log(`[MQTT Telemetria] [${deviceId}] Temp: ${parsed.temp}°C | Umid: ${parsed.humidity}% | Ruído: ${parsed.noiseLevel}dB${luxStr}${seqStr} | Status: ${statusLog}`);
       } else if (subtopic === 'status' || subtopic === 'availability') {
         let statusVal: 'online' | 'offline' = 'online';
         const trimmed = messageStr.trim();

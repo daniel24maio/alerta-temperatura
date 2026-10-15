@@ -45,8 +45,9 @@ apiRouter.get('/devices/:id', async (req: Request, res: Response, next: NextFunc
 apiRouter.get('/devices/:id/history', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const deviceId = req.params.id;
-    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
-    const history = await kvStore.getDeviceHistory(deviceId, isNaN(limit) ? 100 : limit);
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 500;
+    const date = req.query.date as string | undefined;
+    const history = await kvStore.getDeviceHistory(deviceId, isNaN(limit) ? 500 : limit, date);
     return res.json(history);
   } catch (err) {
     next(err);
@@ -56,8 +57,9 @@ apiRouter.get('/devices/:id/history', async (req: Request, res: Response, next: 
 apiRouter.get('/devices/:id/history/export', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const deviceId = req.params.id;
-    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 1000;
-    const history = await kvStore.getDeviceHistory(deviceId, isNaN(limit) ? 1000 : limit);
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 5000;
+    const date = req.query.date as string | undefined;
+    const history = await kvStore.getDeviceHistory(deviceId, isNaN(limit) ? 5000 : limit, date);
 
     const headers = [
       'Timestamp (ISO)',
@@ -94,7 +96,8 @@ apiRouter.get('/devices/:id/history/export', async (req: Request, res: Response,
 
     // Adiciona BOM UTF-8 (\uFEFF) para garantir acentuação correta no Excel brasileiro
     const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
-    const filename = `telemetria-${deviceId}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const dateSuffix = date ? `-${date}` : `-${new Date().toISOString().slice(0, 10)}`;
+    const filename = `telemetria-${deviceId}${dateSuffix}.csv`;
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

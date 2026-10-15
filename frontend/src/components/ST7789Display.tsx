@@ -14,7 +14,7 @@ export const ST7789Display: React.FC<ST7789DisplayProps> = ({
   humidity,
   noise,
   actuatorState,
-  alertText = 'Ambiente OK - Condicoes ideais',
+  alertText = 'AMBIENTE EM CONFORMIDADE',
   hasAlert,
 }) => {
   return (

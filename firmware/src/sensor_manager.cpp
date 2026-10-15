@@ -73,36 +73,37 @@ SensorData SensorManager::readSensors() {
     int noiseDb = map(constrain(noiseRaw, 0, 4095), 0, 4095, 40, 95);
     data.noiseLevel = noiseDb;
 
-    // Avaliação das 4 Regras de Saúde & Conforto Ambiental
+    // Avaliação de Conformidade dos Sensores (Refletindo no status do ambiente somente o item fora da conformidade)
     data.requiresActuator = false;
 
-    // Regra 3: Alta Temperatura (>30C) E Baixa Umidade (<40%) - Crítico!
-    if (t > TEMP_THRESHOLD_HIGH && h < HUMIDITY_THRESHOLD_LOW) {
-        data.alertCode = "CRITICAL_HEAT_DRY";
-        data.lcdMessage = "CRITICO: Temp/Umid! Hidratar & ativ. baixa intens.";
-        data.requiresActuator = true;
+    std::vector<String> itensForaConformidade;
+    if (t > TEMP_THRESHOLD_HIGH) {
+        itensForaConformidade.push_back("TEMPERATURA");
     }
-    // Regra 1: Alta Temperatura (>30C)
-    else if (t > TEMP_THRESHOLD_HIGH) {
-        data.alertCode = "HIGH_TEMP";
-        data.lcdMessage = "ALERTA: Temp >30C! Beba agua & ar em circulacao";
-        data.requiresActuator = true;
+    if (h < HUMIDITY_THRESHOLD_LOW) {
+        itensForaConformidade.push_back("UMIDADE");
     }
-    // Regra 2: Temperatura amena E Baixa Umidade (<40%)
-    else if (t >= 18.0f && t <= TEMP_THRESHOLD_HIGH && h < HUMIDITY_THRESHOLD_LOW) {
-        data.alertCode = "LOW_HUMIDITY_MILD";
-        data.lcdMessage = "ALERTA: Baixa umid! Hidrate-se / Evite ex. intenso";
+    if (noiseRaw > NOISE_ADC_THRESHOLD || noiseDb > 75) {
+        itensForaConformidade.push_back("RUIDO");
     }
-    // Regra 4: Muito Barulho no Ambiente
-    else if (noiseRaw > NOISE_ADC_THRESHOLD || noiseDb > 75) {
-        data.alertCode = "HIGH_NOISE";
-        data.lcdMessage = "ALERTA: Ruido alto! Favor manter silencio no local";
-        data.requiresActuator = true;
+    if (hasLightMeter && lux > 0 && (lux < 100.0f || lux > 1500.0f)) {
+        itensForaConformidade.push_back("LUMINOSIDADE");
     }
-    // Condição Normal
-    else {
+
+    if (itensForaConformidade.empty()) {
         data.alertCode = "NONE";
-        data.lcdMessage = "Ambiente OK - Condicoes ideais";
+        data.lcdMessage = "AMBIENTE EM CONFORMIDADE";
+        data.requiresActuator = false;
+    } else {
+        // Se qualquer um dos índices estiver fora de conformidade, liga o atuador
+        data.requiresActuator = true;
+        String itensStr = "";
+        for (size_t i = 0; i < itensForaConformidade.size(); i++) {
+            if (i > 0) itensStr += ", ";
+            itensStr += itensForaConformidade[i];
+        }
+        data.alertCode = itensForaConformidade[0] + "_FORA_CONFORMIDADE";
+        data.lcdMessage = "FORA DE CONFORMIDADE: " + itensStr;
     }
 
     return data;

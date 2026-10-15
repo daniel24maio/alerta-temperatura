@@ -120,24 +120,24 @@ function readAndSendTelemetry() {
   const noiseRaw = analogRead(PIN_SOUND);
   const noiseDb = Math.floor(noiseRaw * 50 + 40);
 
-  let alertCode = "NONE";
-  let lcdText = "Ambiente OK - Condicoes ideais";
+  const nonConforming = [];
+  if (temp > 30.0) {
+    nonConforming.push("TEMPERATURA");
+  }
+  if (humidity < 40.0) {
+    nonConforming.push("UMIDADE");
+  }
+  if (noiseDb > 75) {
+    nonConforming.push("RUIDO");
+  }
 
-  if (temp > 30.0 && humidity < 40.0) {
-    alertCode = "CRITICAL_HEAT_DRY";
-    lcdText = "CRITICO: Temp/Umid! Hidratar & ativ. baixa intens.";
-    setActuator(true);
-  } else if (temp > 30.0) {
-    alertCode = "HIGH_TEMP";
-    lcdText = "ALERTA: Temp >30C! Beba agua & ar em circulacao";
-    setActuator(true);
-  } else if (temp >= 18.0 && temp <= 30.0 && humidity < 40.0) {
-    alertCode = "LOW_HUMIDITY_MILD";
-    lcdText = "ALERTA: Baixa umid! Hidrate-se / Evite ex. intenso";
-  } else if (noiseDb > 75) {
-    alertCode = "HIGH_NOISE";
-    lcdText = "ALERTA: Ruido alto! Favor manter silencio no local";
-    setActuator(true);
+  let alertCode = "NONE";
+  let lcdText = "AMBIENTE EM CONFORMIDADE";
+
+  if (nonConforming.length > 0) {
+    alertCode = nonConforming[0] + "_FORA_CONFORMIDADE";
+    lcdText = "FORA DE CONFORMIDADE: " + nonConforming.join(", ");
+    setActuator(true); // Liga o atuador se qualquer índice estiver fora de conformidade
   }
 
   const payload = JSON.stringify({
