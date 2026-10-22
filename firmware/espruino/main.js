@@ -138,6 +138,8 @@ function readAndSendTelemetry() {
     alertCode = nonConforming[0] + "_FORA_CONFORMIDADE";
     lcdText = "FORA DE CONFORMIDADE: " + nonConforming.join(", ");
     setActuator(true); // Liga o atuador se qualquer índice estiver fora de conformidade
+  } else {
+    setActuator(false); // Desliga o atuador quando o ambiente volta à conformidade
   }
 
   const payload = JSON.stringify({

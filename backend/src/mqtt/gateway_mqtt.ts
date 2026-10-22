@@ -107,11 +107,11 @@ class GatewayMQTTService {
         // Quando algum dos índices estiver fora de conformidade, liga o atuador fisicamente no hardware e no estado
         if (!isConform) {
           parsed.actuatorState = true;
+          this.autoTriggeredDevices.add(deviceId);
           const now = Date.now();
           const lastCmd = this.lastAutoCommandTime.get(deviceId) || 0;
           if (!rawJson.actuatorState && now - lastCmd > 4000) {
             this.lastAutoCommandTime.set(deviceId, now);
-            this.autoTriggeredDevices.add(deviceId);
             console.log(`[MQTT Gateway] ⚡ Condição anormal detectada em [${deviceId}] (${nonConforming.join(', ')}). Enviando comando MQTT para LIGAR atuador físico...`);
             this.sendCommand(deviceId, 'set', true).catch((err) => {
               console.warn(`[MQTT Gateway] Aviso ao enviar comando automático para [${deviceId}]:`, err.message || err);
@@ -154,6 +154,13 @@ class GatewayMQTTService {
         const rawJson = JSON.parse(messageStr);
         const parsed = ackSchema.parse(rawJson);
         console.log(`[MQTT Confirmação/State] [${deviceId}] Req: ${parsed.commandId} | Estado: ${parsed.state}`);
+
+        // Atualiza imediatamente o estado confirmado do atuador no Redis
+        const record = await kvStore.getDeviceRecord(deviceId);
+        if (record && record.state) {
+          record.state.actuatorState = parsed.state;
+          await kvStore.saveTelemetry(deviceId, record.state);
+        }
 
         const pending = this.pendingCommands.get(parsed.commandId);
         if (pending) {

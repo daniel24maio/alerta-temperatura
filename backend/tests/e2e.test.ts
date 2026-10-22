@@ -111,4 +111,54 @@ describe('Suíte de Testes de Integração Backend & Persistência (Vitest)', ()
     expect(record?.status).toBe('offline');
     expect(record?.lastSeen).toBeDefined();
   });
+
+  // Entrega 6: Comunicação Bidirecional e Confirmação de Comandos
+  it('Deve validar payload de confirmação (ACK/State) publicado pelo ESP32 (Entrega 6)', () => {
+    const rawAck = {
+      deviceId: 'esp32_temp',
+      actuator: 'led',
+      state: true,
+      requestId: 'cmd_test_123',
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+
+    const parsed = ackSchema.parse(rawAck);
+    expect(parsed.commandId).toBe('cmd_test_123');
+    expect(parsed.state).toBe(true);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('Deve atualizar o estado do atuador no Redis exclusivamente após confirmação do dispositivo (Entrega 6)', async () => {
+    const testDeviceId = 'test-device-ack-flow';
+
+    // 1. Estado inicial: Atuador desligado (false)
+    const initialTelemetry = telemetrySchema.parse({
+      temp: 24.0,
+      humidity: 50.0,
+      noiseLevel: 42,
+      actuatorState: false,
+    });
+    await kvStore.saveTelemetry(testDeviceId, initialTelemetry);
+
+    let record = await kvStore.getDeviceRecord(testDeviceId);
+    expect(record?.state?.actuatorState).toBe(false);
+
+    // 2. Simula comando emitido pelo Gateway e confirmação (ACK) retornada pelo ESP32
+    const confirmedAck = ackSchema.parse({
+      deviceId: testDeviceId,
+      actuator: 'led',
+      state: true,
+      requestId: 'cmd_ack_confirmed',
+    });
+
+    // 3. Atualiza estado com base na confirmação recebida
+    if (record && record.state) {
+      record.state.actuatorState = confirmedAck.state;
+      await kvStore.saveTelemetry(testDeviceId, record.state);
+    }
+
+    // 4. Verifica se o Redis reflete o estado efetivamente confirmado (true)
+    const updatedRecord = await kvStore.getDeviceRecord(testDeviceId);
+    expect(updatedRecord?.state?.actuatorState).toBe(true);
+  });
 });

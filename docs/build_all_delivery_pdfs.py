@@ -401,10 +401,15 @@ def main():
             "pdf": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-5/Entrega_5_Persistencia_Redis_Historico_e_Presenca.pdf",
             "title": "Entrega 5 — Persistência no Redis, Histórico e Presença"
         },
+        {
+            "md": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-6/Entrega_6_Comunicacao_Bidirecional_e_Confirmacao.md",
+            "pdf": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-6/Entrega_6_Comunicacao_Bidirecional_e_Confirmacao.pdf",
+            "title": "Entrega 6 — Comunicação Bidirecional e Confirmação de Comandos"
+        },
     ]
 
     print("==================================================")
-    print("Compilando Documentos PDF Oficiais (Legibilidade Aprimorada)")
+    print("Compilando Documentos PDF Oficiais (Entregas 2 a 6)")
     print("==================================================")
 
     for item in deliveries:

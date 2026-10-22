@@ -9,6 +9,7 @@
 
 static unsigned long lastTelemetryTime = 0;
 static uint32_t telemetrySequence = 0;
+static bool autoTriggeredActuator = true;
 
 // Callback chamado ao receber comandos MQTT do Broker / Gateway
 void handleMqttCommand(char* topic, byte* payload, unsigned int length) {
@@ -52,6 +53,7 @@ void handleMqttCommand(char* topic, byte* payload, unsigned int length) {
 
         // Aplica o acionamento físico no hardware
         ActuatorManager::setActuatorState(requestedState);
+        autoTriggeredActuator = false; // Comando manual explícito tem precedência
 
         // Publica Confirmação de Estado no tópico .../state com retain=true (Item 10)
         MQTTClientManager::publishState(target, requestedState, requestId);
@@ -88,11 +90,22 @@ void loop() {
         // Leitura dos sensores e avaliação das regras
         SensorData sensorData = SensorManager::readSensors();
 
-        // Se qualquer um dos índices estiver fora de conformidade, liga o atuador automaticamente
-        if (sensorData.requiresActuator && !ActuatorManager::getActuatorState()) {
-            ActuatorManager::setActuatorState(true);
-            MQTTClientManager::publishState("led", true, "auto-rule-alert");
-            Serial.println("[ATUADOR] Condição anormal detectada: Atuador LIGADO automaticamente.");
+        // Avaliação do Atuador baseada na conformidade ambiental:
+        if (sensorData.requiresActuator) {
+            if (!ActuatorManager::getActuatorState()) {
+                ActuatorManager::setActuatorState(true);
+                MQTTClientManager::publishState("led", true, "auto-rule-alert");
+                Serial.println("[ATUADOR] Condição anormal detectada: Atuador LIGADO automaticamente.");
+            }
+            autoTriggeredActuator = true;
+        } else {
+            // Se todas as regras estão em conformidade e o atuador foi acionado por alerta automático, desliga-o
+            if (ActuatorManager::getActuatorState() && autoTriggeredActuator) {
+                ActuatorManager::setActuatorState(false);
+                autoTriggeredActuator = false;
+                MQTTClientManager::publishState("led", false, "auto-rule-resolved");
+                Serial.println("[ATUADOR] Conformidade restabelecida: Atuador DESLIGADO automaticamente.");
+            }
         }
 
         // Renderização no Display TFT ST7789
