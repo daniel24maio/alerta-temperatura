@@ -406,10 +406,25 @@ def main():
             "pdf": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-6/Entrega_6_Comunicacao_Bidirecional_e_Confirmacao.pdf",
             "title": "Entrega 6 — Comunicação Bidirecional e Confirmação de Comandos"
         },
+        {
+            "md": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-7/Entrega_7_API_REST_Consultas_e_Erros_HTTP.md",
+            "pdf": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-7/Entrega_7_API_REST_Consultas_e_Erros_HTTP.pdf",
+            "title": "Entrega 7 — API REST, Consultas ao Redis e Tratamento de Erros"
+        },
+        {
+            "md": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-8/Entrega_8_Sistema_Web_Monitoramento_e_Controle.md",
+            "pdf": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-8/Entrega_8_Sistema_Web_Monitoramento_e_Controle.pdf",
+            "title": "Entrega 8 — Sistema Web de Monitoramento e Controle"
+        },
+        {
+            "md": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-9/Entrega_9_Integracao_Final_Seguranca_e_Testes.md",
+            "pdf": "/Users/daniel/ifmg/io-sensor/alerta-temperatura/docs/entrega-9/Entrega_9_Integracao_Final_Seguranca_e_Testes.pdf",
+            "title": "Entrega 9 — Integração Final, Segurança e Testes"
+        },
     ]
 
     print("==================================================")
-    print("Compilando Documentos PDF Oficiais (Entregas 2 a 6)")
+    print("Compilando Documentos PDF Oficiais (Entregas 2 a 9)")
     print("==================================================")
 
     for item in deliveries:

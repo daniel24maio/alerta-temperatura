@@ -42,12 +42,63 @@ apiRouter.get('/devices/:id', async (req: Request, res: Response, next: NextFunc
   }
 });
 
+apiRouter.get('/devices/:id/state', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const deviceId = req.params.id;
+    const record = await kvStore.getDeviceRecord(deviceId);
+
+    if (!record) {
+      return res.status(404).json({ error: 'NOT_FOUND', message: `Dispositivo '${deviceId}' não encontrado.` });
+    }
+
+    if (!record.state) {
+      return res.status(404).json({ error: 'NO_TELEMETRY_DATA', message: `Nenhum estado de telemetria disponível para '${deviceId}'.` });
+    }
+
+    return res.json({
+      deviceId: record.deviceId,
+      status: record.status,
+      lastSeen: record.lastSeen,
+      state: record.state,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+apiRouter.get('/devices/:id/presence', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const deviceId = req.params.id;
+    const record = await kvStore.getDeviceRecord(deviceId);
+
+    if (!record) {
+      return res.status(404).json({ error: 'NOT_FOUND', message: `Dispositivo '${deviceId}' não encontrado.` });
+    }
+
+    return res.json({
+      deviceId: record.deviceId,
+      status: record.status,
+      lastSeen: record.lastSeen,
+      ip: record.ip || null,
+      firmwareVersion: record.firmwareVersion || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 apiRouter.get('/devices/:id/history', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const deviceId = req.params.id;
+    const record = await kvStore.getDeviceRecord(deviceId);
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 500;
     const date = req.query.date as string | undefined;
     const history = await kvStore.getDeviceHistory(deviceId, isNaN(limit) ? 500 : limit, date);
+
+    if (!record && history.length === 0) {
+      return res.status(404).json({ error: 'NOT_FOUND', message: `Histórico não encontrado: dispositivo '${deviceId}' inexistente.` });
+    }
+
     return res.json(history);
   } catch (err) {
     next(err);

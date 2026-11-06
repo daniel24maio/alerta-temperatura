@@ -2,6 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { HistoryItem } from './HistoryTable';
 
 type MetricType = 'temp' | 'humidity' | 'noiseLevel' | 'lux';
+type PeriodType = 'day' | 'week' | 'month';
+
+const PERIODS: { id: PeriodType; label: string; desc: string }[] = [
+  { id: 'day', label: 'Dia', desc: 'Leituras do dia atual' },
+  { id: 'week', label: 'Semana', desc: 'Últimos 7 dias' },
+  { id: 'month', label: 'Mês', desc: 'Últimos 30 dias' },
+];
 
 interface MetricConfig {
   id: MetricType;
@@ -67,6 +74,7 @@ interface HistoryChartProps {
 
 export const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('temp');
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('day');
   const [hoveredPoint, setHoveredPoint] = useState<{
     x: number;
     y: number;
@@ -76,23 +84,69 @@ export const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
 
   const activeConfig = METRICS.find((m) => m.id === selectedMetric) || METRICS[0];
 
-  // Inverte os pontos para cronologia crescente (da esquerda para direita: passado -> presente)
-  const sortedPoints = useMemo(() => {
-    return [...history].reverse();
-  }, [history]);
+  const getLocalDateKey = (isoStr: string) => {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
-  // Extrai valores numéricos válidos da métrica
+  // Filtra por período (Dia, Semana ou Mês) em relação à leitura mais recente e ordena cronologicamente
+  const periodPoints = useMemo(() => {
+    if (!history || history.length === 0) return [];
+    const valid = history.filter((item) => item.recordedAt && !isNaN(new Date(item.recordedAt).getTime()));
+    if (valid.length === 0) return [];
+
+    // Identifica o timestamp mais recente
+    let maxTs = 0;
+    let latestIso = valid[0].recordedAt;
+    for (const item of valid) {
+      const ts = new Date(item.recordedAt).getTime();
+      if (ts > maxTs) {
+        maxTs = ts;
+        latestIso = item.recordedAt;
+      }
+    }
+
+    const latestDayKey = getLocalDateKey(latestIso);
+
+    const filtered = valid.filter((item) => {
+      const ts = new Date(item.recordedAt).getTime();
+      if (selectedPeriod === 'day') {
+        return getLocalDateKey(item.recordedAt) === latestDayKey;
+      }
+      if (selectedPeriod === 'week') {
+        return maxTs - ts <= 7 * 24 * 60 * 60 * 1000;
+      }
+      return maxTs - ts <= 30 * 24 * 60 * 60 * 1000;
+    });
+
+    return filtered.sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+  }, [history, selectedPeriod]);
+
+  // Extrai valores numéricos válidos da métrica e formata o rótulo do eixo temporal conforme o período
   const dataPoints = useMemo(() => {
-    return sortedPoints.map((item) => {
+    return periodPoints.map((item) => {
       const rawVal = item[selectedMetric];
-      const val = typeof rawVal === 'number' && !isNaN(rawVal) ? rawVal : 0;
+      let val = typeof rawVal === 'number' && !isNaN(rawVal) ? rawVal : 0;
+      // Filtra pico espúrio de inicialização do sensor BH1750 (> 2500 lx) para preservar a escala visual
+      if (selectedMetric === 'lux' && val > 2500) {
+        val = 350;
+      }
+      const d = new Date(item.recordedAt);
+      const timeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const shortDateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      const shortTimeStr = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const axisLabel = selectedPeriod === 'day' ? timeStr : `${shortDateStr} ${shortTimeStr}`;
       return {
         value: val,
-        time: new Date(item.recordedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        time: axisLabel,
         fullDate: item.recordedAt,
       };
     });
-  }, [sortedPoints, selectedMetric]);
+  }, [periodPoints, selectedMetric, selectedPeriod]);
 
   // Estatísticas (Mín, Média, Máx, Atual)
   const stats = useMemo(() => {
@@ -112,7 +166,7 @@ export const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
   // Dimensões do viewBox SVG
   const width = 800;
   const height = 240;
-  const paddingX = 45;
+  const paddingX = 48;
   const paddingTop = 25;
   const paddingBottom = 35;
 
@@ -130,7 +184,8 @@ export const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
   }
 
   const rangeY = maxY - minY || 1;
-  const yAxisMin = Math.floor(minY - rangeY * 0.15);
+  const rawMinY = Math.floor(minY - rangeY * 0.15);
+  const yAxisMin = selectedMetric === 'temp' ? rawMinY : Math.max(0, rawMinY);
   const yAxisMax = Math.ceil(maxY + rangeY * 0.15);
   const totalYRange = yAxisMax - yAxisMin || 1;
 
@@ -155,36 +210,63 @@ export const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
 
   return (
     <div className="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-6 shadow-xl space-y-5">
-      {/* Cabeçalho com Seleção de Métrica */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Cabeçalho com Seleção de Período (Dia / Semana / Mês) e Seleção de Métrica */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
             <span>📈</span> Curvas Temporais de Telemetria
           </h3>
           <p className="text-xs text-slate-400">
-            Evolução temporal das variáveis coletadas pelo ESP32 ({dataPoints.length} amostras)
+            Evolução temporal das variáveis coletadas pelo ESP32 ({dataPoints.length} leituras no período:{' '}
+            <strong className="text-sky-400">
+              {PERIODS.find((p) => p.id === selectedPeriod)?.desc}
+            </strong>
+            )
           </p>
         </div>
 
-        {/* Abas das 4 Variáveis */}
-        <div className="flex flex-wrap gap-1 bg-slate-900/70 p-1 rounded-xl border border-slate-700/60 self-start md:self-auto">
-          {METRICS.map((m) => {
-            const isSelected = m.id === selectedMetric;
-            return (
-              <button
-                key={m.id}
-                onClick={() => setSelectedMetric(m.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  isSelected
-                    ? 'bg-slate-700 text-white shadow-sm ring-1 ring-slate-600'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                }`}
-              >
-                <span>{m.icon}</span>
-                <span>{m.label}</span>
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Seletor de Período: Dia, Semana ou Mês */}
+          <div className="flex items-center gap-1 bg-slate-900/70 p-1 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 px-2 font-medium">Período:</span>
+            {PERIODS.map((p) => {
+              const isActive = p.id === selectedPeriod;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedPeriod(p.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-sky-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Abas das 4 Variáveis */}
+          <div className="flex flex-wrap gap-1 bg-slate-900/70 p-1 rounded-xl border border-slate-700/60">
+            {METRICS.map((m) => {
+              const isSelected = m.id === selectedMetric;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedMetric(m.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    isSelected
+                      ? 'bg-slate-700 text-white shadow-sm ring-1 ring-slate-600'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span>{m.icon}</span>
+                  <span>{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -316,36 +398,29 @@ export const HistoryChart: React.FC<HistoryChartProps> = ({ history }) => {
             );
           })}
 
-          {/* Eixo de Tempo (Labels embaixo) */}
-          {dataPoints.length > 0 && (
-            <>
-              <text x={paddingX} y={height - 10} fontSize="10" fill="#64748b" fontFamily="monospace">
-                {dataPoints[0].time}
-              </text>
-              {dataPoints.length > 2 && (
+          {/* Eixo de Tempo (5 marcações proporcionais às leituras do período selecionado) */}
+          {dataPoints.length > 0 &&
+            [0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+              const ptIndex = Math.min(
+                dataPoints.length - 1,
+                Math.round(ratio * (dataPoints.length - 1))
+              );
+              const x = paddingX + chartWidth * ratio;
+              const anchor = idx === 0 ? 'start' : idx === 4 ? 'end' : 'middle';
+              return (
                 <text
-                  x={paddingX + chartWidth / 2}
+                  key={idx}
+                  x={x}
                   y={height - 10}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fill="#64748b"
+                  textAnchor={anchor}
+                  fontSize="9.5"
+                  fill="#94a3b8"
                   fontFamily="monospace"
                 >
-                  {dataPoints[Math.floor(dataPoints.length / 2)].time}
+                  {dataPoints[ptIndex].time}
                 </text>
-              )}
-              <text
-                x={width - paddingX}
-                y={height - 10}
-                textAnchor="end"
-                fontSize="10"
-                fill="#64748b"
-                fontFamily="monospace"
-              >
-                {dataPoints[dataPoints.length - 1].time}
-              </text>
-            </>
-          )}
+              );
+            })}
 
           {/* Tooltip Dinâmico ao passar o mouse */}
           {hoveredPoint && (

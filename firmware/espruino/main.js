@@ -8,11 +8,11 @@
 // true  = Rede Atual / MacBook (10.11.30.190)
 // false = Rede de Casa (192.168.31.220 / Wi-Fi "Luca")
 // ==============================================================================
-const USE_MACBOOK_NETWORK = true;
+const USE_MACBOOK_NETWORK = false;
 
 const WIFI_SSID = USE_MACBOOK_NETWORK ? "SEU_SSID_WIFI_AQUI" : "Luca";
 const WIFI_PASS = USE_MACBOOK_NETWORK ? "SUA_SENHA_WIFI_AQUI" : "que1985@";
-const MQTT_HOST = USE_MACBOOK_NETWORK ? "10.11.30.190" : "192.168.31.220";
+const MQTT_HOST = USE_MACBOOK_NETWORK ? "10.11.30.190" : "192.168.1.170";
 const DEVICE_ID = "esp32-temp-01";
 
 const TOPIC_TELEMETRY = "v1/devices/" + DEVICE_ID + "/telemetry";

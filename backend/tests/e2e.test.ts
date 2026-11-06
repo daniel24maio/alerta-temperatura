@@ -1,6 +1,65 @@
 import { describe, it, expect } from 'vitest';
+import express from 'express';
+import { EventEmitter } from 'events';
 import { telemetrySchema, statusSchema, commandRequestSchema, ackSchema } from '../src/validators/schemas';
 import { kvStore } from '../src/storage/kv_store';
+import { apiRouter } from '../src/api/routes';
+import { errorHandler } from '../src/middleware/error_handler';
+
+const testApp = express();
+testApp.use('/api', apiRouter);
+testApp.use(errorHandler);
+const authHeader = 'Basic ' + Buffer.from('admin:admin123').toString('base64');
+
+function invokeApi(method: string, url: string, headers: Record<string, string> = {}, body?: any): Promise<{ status: number; body: any }> {
+  return new Promise((resolve) => {
+    const req: any = Object.assign(new EventEmitter(), {
+      method,
+      url,
+      originalUrl: url,
+      headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])),
+      body: body || {},
+      _body: true,
+      get(name: string) {
+        return this.headers[name.toLowerCase()];
+      },
+      header(name: string) {
+        return this.headers[name.toLowerCase()];
+      },
+    });
+    const resHeaders: Record<string, string> = {};
+    const res: any = Object.assign(new EventEmitter(), {
+      statusCode: 200,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      setHeader(k: string, v: string) {
+        resHeaders[k.toLowerCase()] = v;
+      },
+      getHeader(k: string) {
+        return resHeaders[k.toLowerCase()];
+      },
+      json(data: any) {
+        resolve({ status: this.statusCode, body: data });
+        return this;
+      },
+      send(data: any) {
+        resolve({ status: this.statusCode, body: data });
+        return this;
+      },
+      end(data?: any) {
+        resolve({ status: this.statusCode, body: data });
+        return this;
+      },
+    });
+    testApp.handle(req, res, (err: any) => {
+      if (err) {
+        errorHandler(err, req, res, () => {});
+      }
+    });
+  });
+}
 
 describe('Suíte de Testes de Integração Backend & Persistência (Vitest)', () => {
   // Entrega 4: Validação e Diagnóstico de Mensagens
@@ -160,5 +219,79 @@ describe('Suíte de Testes de Integração Backend & Persistência (Vitest)', ()
     // 4. Verifica se o Redis reflete o estado efetivamente confirmado (true)
     const updatedRecord = await kvStore.getDeviceRecord(testDeviceId);
     expect(updatedRecord?.state?.actuatorState).toBe(true);
+  });
+
+  // Entrega 7: API HTTP/JSON em Node.js integrada ao Redis e Tratamento de Erros HTTP
+  it('Deve consultar estado atual, presença e histórico via endpoints REST com respostas JSON (Entrega 7)', async () => {
+    const deviceId = 'esp32_api_test';
+    await kvStore.updateDeviceStatus(deviceId, {
+      status: 'online',
+      ip: '192.168.1.175',
+      firmwareVersion: '1.0.0',
+      timestamp: Math.floor(Date.now() / 1000),
+    });
+    await kvStore.saveTelemetry(
+      deviceId,
+      telemetrySchema.parse({
+        temp: 24.8,
+        humidity: 72.5,
+        noiseLevel: 40,
+        lux: 320,
+        actuatorState: false,
+      })
+    );
+
+    // 1. Consulta de estado atual (GET /api/devices/:id e GET /api/devices/:id/state)
+    const resState = await invokeApi('GET', `/api/devices/${deviceId}`, { Authorization: authHeader });
+    expect(resState.status).toBe(200);
+    expect(resState.body.deviceId).toBe(deviceId);
+    expect(resState.body.state.temp).toBe(24.8);
+
+    const resStateSub = await invokeApi('GET', `/api/devices/${deviceId}/state`, { Authorization: authHeader });
+    expect(resStateSub.status).toBe(200);
+    expect(resStateSub.body.state.humidity).toBe(72.5);
+
+    // 2. Consulta de presença e último contato (GET /api/devices/:id/presence)
+    const resPresence = await invokeApi('GET', `/api/devices/${deviceId}/presence`, { Authorization: authHeader });
+    expect(resPresence.status).toBe(200);
+    expect(resPresence.body.status).toBe('online');
+    expect(resPresence.body.lastSeen).toBeDefined();
+    expect(resPresence.body.ip).toBe('192.168.1.175');
+
+    // 3. Consulta de histórico de telemetria (GET /api/devices/:id/history)
+    const resHistory = await invokeApi('GET', `/api/devices/${deviceId}/history?limit=5`, { Authorization: authHeader });
+    expect(resHistory.status).toBe(200);
+    expect(Array.isArray(resHistory.body)).toBe(true);
+    expect(resHistory.body.length).toBeGreaterThanOrEqual(1);
+    expect(resHistory.body[0].temp).toBe(24.8);
+  });
+
+  it('Deve retornar códigos HTTP adequados para erros (401, 404, 400 e 503) na API REST (Entrega 7)', async () => {
+    // 401 Unauthorized sem credenciais
+    const res401 = await invokeApi('GET', '/api/devices');
+    expect(res401.status).toBe(401);
+    expect(res401.body.error).toBe('UNAUTHORIZED');
+
+    // 404 Not Found para dispositivo inexistente no estado atual, presença e histórico
+    const res404Device = await invokeApi('GET', '/api/devices/dispositivo_inexistente_xyz', { Authorization: authHeader });
+    expect(res404Device.status).toBe(404);
+    expect(res404Device.body.error).toBe('NOT_FOUND');
+
+    const res404Presence = await invokeApi('GET', '/api/devices/dispositivo_inexistente_xyz/presence', { Authorization: authHeader });
+    expect(res404Presence.status).toBe(404);
+
+    const res404History = await invokeApi('GET', '/api/devices/dispositivo_inexistente_xyz/history', { Authorization: authHeader });
+    expect(res404History.status).toBe(404);
+
+    // 404 Ausência de dados de telemetria (dispositivo registrado apenas com presença sem telemetria)
+    await kvStore.updateDeviceStatus('esp32_sem_telemetria', { status: 'online' });
+    const res404NoData = await invokeApi('GET', '/api/devices/esp32_sem_telemetria/state', { Authorization: authHeader });
+    expect(res404NoData.status).toBe(404);
+    expect(res404NoData.body.error).toBe('NO_TELEMETRY_DATA');
+
+    // 400 Bad Request para payload de comando inválido
+    const res400 = await invokeApi('POST', '/api/devices/esp32_api_test/command', { Authorization: authHeader }, { action: 'INVALID_ACTION' });
+    expect(res400.status).toBe(400);
+    expect(res400.body.error).toBe('VALIDATION_ERROR');
   });
 });
